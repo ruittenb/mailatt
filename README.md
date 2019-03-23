@@ -6,18 +6,19 @@ The Content-Type and Content-Transfer-Encoding are guessed, but can be overruled
 
 ## Building:
 
-It's ready to go!
+The first (shebang) line may need fixing:
+
+```
+make bin
+```
 
 ## Example:
-
 
 ```
 mailatt −s 'Filesystem usage' −r sysadmin@domain.nl -i message.html fsgraph−*.eps
 ```
 
-
 ## Installing:
-
 
 ```
 make install
