@@ -24,7 +24,7 @@ all: bin mandoc ## Fix shebang line in script file; generate manpage (all format
 
 .PHONY: bin
 bin: $(PROG) ## Fix shebang line in script file
-	sed -i.bak 's,^#!/usr/bin/ksh,#!$(SHEBANG),' $<
+	sed -i.bak 's,^#!.*,#!$(SHEBANG),' $<
 
 .PHONY: man
 man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
@@ -33,7 +33,7 @@ man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
 mandoc: $(PROG).pdf ## Generate manpage (ps and pdf format)
 
 $(PROG).$(SECTION): $(PROG)
-	pod2man $(PODOPTS) $< > $@
+	pod2man $(PODOPTS) $< | sed 's/@(#)ms.acc/ms.acc/' > $@
 
 $(PROG).ps: $(PROG).$(SECTION)
 	groff -man -Tps $< > $@
@@ -81,7 +81,7 @@ test: $(PROG) ## Run simple test
 		echo 'Test 12 succesful (body)'
 
 .PHONY: install
-install: mailatt ## Copy binary and manpage to system directories
+install: $(PROG) ## Copy binary and manpage to system directories
 	./install.sh
 
 .PHONY: clean
@@ -90,5 +90,5 @@ clean: ## Remove the manpages
 
 .PHONY: distclean
 distclean: clean ## Cleanup and prepare for distribution
-	rm -f config.*
+	rm -f config.* $(PROG).bak
 
