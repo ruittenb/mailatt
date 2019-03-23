@@ -3,8 +3,9 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.13
-# Date:		2011-02-11
+# Version:	1.13.1
+# Created:	2011-02-11
+# Date:		2019-03-23
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
@@ -34,8 +35,8 @@ version='
 =pod
 
 =for roff
-.ds Yr 2011
-.ds Vw @(#) mailatt 1.13
+.ds Yr 2019
+.ds Vw @(#) mailatt 1.13.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -1055,7 +1056,7 @@ be reported in the mail as I<text/plain>. Attach it by filename instead.
 
 =for roff
 .PP \" display the 'pertains to'-macro
-.Vp \*(Vw \
+.Vp \*(Vw
 
 =head1 SEE ALSO
 
