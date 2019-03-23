@@ -1,0 +1,4 @@
+
+install: mailatt
+	./install.sh
+

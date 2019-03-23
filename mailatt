@@ -1,0 +1,1115 @@
+#!/usr/bin/ksh
+#
+############################################################################
+#
+# Name:		mailatt
+# Version:	1.13
+# Date:		2011-02-11
+# Author:	Rene Uittenbogaard
+# Requires:	sendmail
+# Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
+#			[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]
+#			[ -H <headerline> ] [ -8Iadimqu ]
+#			[ -C <charset> ] [ <file1> .. <filen> ]
+#		mailatt { -h | -v }
+#
+# TODO:		test: unfolded header lines
+#		test: send yenc with -8
+#		bug?: convert to crlf for qp? f_onlcr?
+#		feat: implement multipart/related using content-id?
+#		feat: mailatt_args in header
+#		feat: Content-MD5 header?
+#		feat: move builtin MIME list to external file?
+#		feat: make separate qpencode for textfiles?
+#		feat: make -m, -u also for textfiles?
+#
+
+# The main program code starts at the label '# main'
+
+############################################################################
+# version info for *roff
+
+version='
+
+=pod
+
+=for roff
+.ds Yr 2011
+.ds Vw @(#) mailatt 1.13
+.de Vp
+This manual pertains to \fBmailatt\fP version \\$3.
+..
+.hy 0 \" hyphenation off \
+
+=cut '
+
+############################################################################
+# functions
+
+f_initialize() {
+	f_setpath
+	f_findawk
+	f_select_encoder m
+	f_find_cid_data
+	attno=0
+	spec_filename=1
+	charset=us-ascii
+	mixed_alternative=mixed
+	inline_attachment=attachment
+	allow8bit=0
+}
+
+f_setpath() {
+	# SunOS 5.7 has sendmail installed in /usr/lib
+	# SunOS 5.8 has a broken /usr/ucb/echo, don't put it in front!
+	PATH=/usr/sbin:$PATH:/usr/ucb:/usr/ccs/bin:/usr/xpg4/bin:/usr/local/bin:/usr/lib
+}
+
+f_findawk() {
+	if f_which gawk >/dev/null 2>&1; then
+		awk=gawk
+	elif [ -x /usr/xpg4/bin/awk ]; then
+		awk=/usr/xpg4/bin/awk
+	elif f_which mawk >/dev/null 2>&1; then
+		awk=mawk
+	elif f_which nawk >/dev/null 2>&1; then
+		awk=nawk
+	else
+		awk=awk
+	fi
+}
+
+f_echo() {
+	printf "%b\n" "$*"
+}
+
+f_echon() {
+	printf "%b" "$*"
+}
+
+f_usage() {
+	f_echo "Usage: $argv0 [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]"
+	f_echo "\t\t[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]"
+	f_echo "\t\t[ -H <headerline> ] [ -8Iadimqu ]"
+	f_echo "\t\t[ -C <charset> ] [ <file1> .. <filen> ]"
+	f_echo "       $argv0 { -h | -v }"
+}
+
+f_version() {
+	f_echo "$version" | $awk '/@[(]#[)]/ { sub(".*@[(]#[)] ?", ""); print }'
+}
+
+f_getusername() {
+	# find name from password file (GCOS field)
+	{
+		if f_which domainname && test "`domainname 2>/dev/null`"; then
+			ypmatch "$1" passwd 2>/dev/null
+		fi
+		cat /etc/passwd
+	} | $awk -F: '$1 == "'"$1"'" { sub(/,.*/, "", $5); print $5 }'
+}
+
+f_termmess() {
+	test -t 0 && f_echo "Reading document from stdin.." 1>&2
+}
+
+f_lowercase() {
+	# tr '[:upper:]' '[:lower:]' # needs LC_CTYPE to function correctly
+	f_echo "$@" | tr A-Z a-z
+}
+
+f_test_argc() {
+	if [ $1 -lt 1 ]; then
+		f_usage 1>&2
+		exit 1
+	fi
+}
+
+f_which() {
+	# built-in "which" does not always set $? correctly
+	for i in $(echo $PATH | tr : " "); do
+		[ -x "$i/$1" ] && return 0
+	done
+	return 1
+}
+
+f_find_cid_data() {
+	cidtime="$(date +"%Y%m%d%H%M%S")"
+	cidrandom="`f_boundbits`"
+	cidhost="$(hostname)" 2>/dev/null
+}
+
+f_escapeperiods() {
+	# apparently not needed
+	$awk '{
+		if (/^\./) print "." $0
+		else	   print
+	}' "$1"
+}
+
+f_onlcr() {
+	$awk '{
+		sub(/\015$/, "")
+		printf("%s\r\n", $0)
+	}' ${1:+"$1"}
+}
+
+f_encode_header() {
+	if [ "$(f_lowercase $charset)" = us-ascii ]; then
+		f_echo "$1"
+	else
+		indent=
+		f_echon "$1" | f_dissect | f_extend_linelen 330 | $awk 'NF > 1 { print }' | while read hline; do
+			f_echo "${indent}=?${charset}?${hencoding}?$(f_echon "$hline" | $hencoder 1)?="
+			indent='\t'
+		done
+	fi
+}
+
+f_add_address() {
+	# allowed values for $addr:
+	#	user
+	#	<user>
+	#	<user@domain>
+	#	name <user>
+	#	name <user@domain>
+	# test whether $addr is of the form user <user@dom>
+	if [ "${addr##*<}" != "$addr" ]; then
+		# split into 'name' and 'user[@domain]' parts
+		fullname="${addr%<*}"
+		while [ "${fullname% }" != "$fullname" ]; do
+			fullname="${fullname% }"
+		done
+		addr="${addr##*<}"
+		addr="${addr%>}"
+	else
+		fullname=
+	fi
+	if [ "${addr#*@}" = "$addr" -a -z "$fullname" ]; then
+		fullname="$(f_getusername "$addr")"
+	fi
+	addressline="${addressline:+$addressline, }${fullname:+$(f_encode_header "$fullname") }<$addr>"
+}
+
+f_add_addresses() {
+	optarg="$1"
+	addressline=
+	if   [ "$currentopt" = r ]; then
+		to="To:"
+	elif [ "$currentopt" = c ]; then
+		to="Cc:"
+	elif [ "$currentopt" = b ]; then
+		to="Bcc:"
+	elif [ "$currentopt" = R ]; then
+		to="Reply-To:"
+	else
+		to="From:"
+		optarg="${optarg%%,*}"
+	fi
+	while [ "${optarg#*,}" != "$optarg" ]; do
+		addr="${optarg%%,*}"
+		optarg="${optarg#*,}"
+		f_add_address
+	done
+	addr="$optarg"
+	f_add_address
+	if [ "$currentopt" = f ]; then
+		envelope_from="-f $addr"
+	fi
+	addresses="$to $addressline${addresses:+\\n$addresses}"
+}
+
+f_urlencode_line() {
+	$awk '{
+		# these two MUST come first
+		gsub(/%/,  "%25"); gsub(/+/,  "%2B");
+		#
+		gsub(/ /,  "%20"); gsub(/\"/, "%22"); gsub(/#/,  "%23");
+		gsub(/\$/, "%24"); gsub(/&/,  "%26"); gsub(/,/,  "%2C");
+		gsub(/\//, "%2F"); gsub(/:/,  "%3A"); gsub(/;/,  "%3B"); 
+		gsub(/</,  "%3C"); gsub(/=/,  "%3D"); gsub(/>/,  "%3E");
+		gsub(/?/,  "%3F"); gsub(/@/,  "%40"); gsub(/\[/, "%5B"); 
+		gsub(/\\/, "%5C"); gsub(/]/,  "%5D"); gsub(/\^/, "%5E");
+		gsub(/`/,  "%60"); gsub(/{/,  "%7B"); gsub(/}/,  "%7D");
+		gsub(/\|/, "%7C"); gsub(/~/,  "%7E");
+		print
+	}'
+}
+
+f_base64encode_line() {
+	# tested on:
+	#	HP-UX 10.20
+	#	HP-UX 11.11
+	#	AIX 4.2
+	#	SunOS 5.8
+	#	SuSE UnitedLinux 1.0
+	#	Debian 3.0
+	$awk -v inheader="$1" '
+		# encode file to base64
+		# remotely based on a script by Peter van Eerten (c) March 6 2003
+		# note: for this implementation, the input line MUST have an exact multiple of 3 no. of bytes
+		#
+		function store(n) {
+			buffer[bufindex++] = n
+			if (bufindex > 3) {
+				spout(buffer[1], buffer[2], buffer[3])
+				bufindex = 1
+			}
+		}
+		function flush() {
+			if (bufindex >= 2) {
+				if (bufindex == 2) buffer[2] = 0
+				spout(buffer[1], buffer[2], 0)
+			}
+			if (!inheader) printf("\n")
+		}
+		function spout(byte1, byte2, byte3) {
+			result = ""
+			# Create BASE64 values
+			base1 = int(byte1 / 4)
+			base2 = ((byte1 %  4) * 16) + int(byte2 / 16)
+			base3 = ((byte2 % 16) *  4) + int(byte3 / 64)
+			base4 = (byte3 % 64)
+			# Compose BASE64 string
+			if (bufindex == 2){
+				result = result substr(BASE64, base1 + 1, 1)
+				result = result substr(BASE64, base2 + 1, 1)
+				result = result "=="
+			}
+			if (bufindex == 3){
+				result = result substr(BASE64, base1 + 1, 1)
+				result = result substr(BASE64, base2 + 1, 1)
+				result = result substr(BASE64, base3 + 1, 1)
+				result = result "="
+			}
+			if (bufindex > 3){
+				result = result substr(BASE64, base1 + 1, 1)
+				result = result substr(BASE64, base2 + 1, 1)
+				result = result substr(BASE64, base3 + 1, 1)
+				result = result substr(BASE64, base4 + 1, 1)
+			}
+			printf(result)
+		}
+		BEGIN {
+			bufindex   = 1
+			BASE64     = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		}
+		NF > 1 {
+			for (i=2; i<=NF; i++) store($i)
+#			if (!inheader) printf("\n")
+			flush()
+		}
+#		END {
+#			flush()
+#		}
+	'
+}
+
+f_qpencode_line() {
+	# This quoted-printable encoder has been tested on:
+	#	HP-UX 10.20
+	#	HP-UX 11.11
+	#	AIX 4.2
+	#	SunOS 5.8
+	#	SuSE UnitedLinux 1.0
+	#	Debian 3.0
+	$awk -v inheader="$1" '
+		NF > 1 {
+			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
+			for (i=2; i<=NF; i++) {
+				# 61 is the equals sign
+				# 46 is the full stop, causes errors at start of line
+				#
+				if (($i>32) && ($i!=46)	 		\
+				&& ($i!=61) && ($i<127)) printf("%c", $i)
+				# next two lines are new
+				else if (($i==32) && (!inheader)	\
+				     && (i>2) && (i<NF)) printf(" ")
+				else			 printf("=%02X", $i)
+			}
+		}
+		END {
+			if (!inheader) printf("\n")
+		}
+	'
+}
+
+f_base64encode_file() {
+	f_dissect ${1:+"$1"} | f_extend_linelen 53 | f_base64encode_line 0
+}
+
+f_qpencode_file() {
+	f_dissect ${1:+"$1"} | f_extend_linelen 23 | f_qpencode_line 0
+}
+
+f_extend_linelen() {
+	$awk -v maxfields="${1:-17}" '
+		BEGIN {
+			# the first field is not accurate any more,
+			# but it is discarded by f_*encode_line anyway
+			printf("0000000")
+		}
+		{
+			for (i=2; i<=NF; i++) {
+				printf(" %3d", $i)
+				if (++r > maxfields) {
+					r = 0
+					printf("\n%s", "0000000")
+				}
+			}
+		}
+		END {
+			printf("\n")
+		}
+	'
+}
+
+f_dissect() {
+	if [ `uname` = FreeBSD ]; then
+		# why did they have to deprecate od(1) :(
+		hexdump -e '"%06.6_ao " 16/1 "%3u " "\n"' ${1:+"$1"}
+	else
+		od -t u1 -v ${1:+"$1"}
+	fi
+}
+
+f_select_encoder() {
+	case "$1" in
+		u)	if f_which uuencode >/dev/null 2>&1; then
+				encoding=uuencode
+				encoder=uuencode
+				hencoding=B
+				hencoder=f_base64encode_line
+			else
+				f_echo "$argv0: Warning: no uuencode found, using base64 instead" 1>&2
+				f_select_encoder m
+			fi
+			;;
+#			# not present on all systems: not portable
+#		m*)	if f_which mmencode >/dev/null 2>&1; then
+#				encoding=base64
+#				encoder=mmencode
+#				hencoding=B
+#				hencoder=f_base64encode_line
+#			else
+#				f_select_encoder fm
+#			fi
+#			;;
+		m)	encoding=base64
+			encoder=f_base64encode_file
+			hencoding=B
+			hencoder=f_base64encode_line
+			;;
+		q)	encoding=quoted-printable
+			encoder=f_qpencode_file
+			hencoding=Q
+			hencoder=f_qpencode_line
+			;;
+		*)	encoding=binary
+			encoder=cat
+			hencoding=B
+			hencoder=f_base64encode_line
+			;;
+	esac
+}
+
+f_boundbits() {
+	echo "$RANDOM $RANDOM * $RANDOM * $$ * 63o p" | dc | $awk 'BEGIN {
+		set="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
+	}
+	{
+		for (i=1;i<=NF;i++) {
+			printf(substr(set, $i+1, 1));
+		}
+	}
+	END {
+		print "";
+	}'
+}
+
+f_startmail() {
+	[ "$addresses"   ] && f_echo "$addresses"
+	[ "$subject"     ] && f_echo "$subject"
+	[ "$headerlines" ] && f_echo "$headerlines"
+	boundary="Mailatt=Part:$RANDOM.$(f_boundbits)+$(f_boundbits)/"
+	cat <<-_MIME_header_preamble_
+		MIME-Version: 1.0
+		Content-Type: multipart/$mixed_alternative; boundary="$boundary"
+		X-Mailer: $(f_version)
+		
+		This is a multipart message in MIME format.
+		If your mail reader displays this preamble, it does not support MIME.
+		
+	_MIME_header_preamble_
+}
+
+f_endmail() {
+	f_echo "--$boundary--"
+}
+
+f_sendmail() {
+	if [ "${MAILATT_DEBUG#0}" ]; then
+		cat
+	else
+		sendmail -t -i $envelope_from
+	fi
+}
+
+f_contentid() {
+	f_echo "$cidtime.$cidrandom.$attno.${fname}@$cidhost" | sed 's/>/_/g'
+}
+
+f_composemail() {
+	f_startmail
+	f_process_all_files "$@"
+	f_endmail
+}
+
+f_binattach() {
+	f_echo "Content-Transfer-Encoding: $encoding"
+	f_echo
+	if [ "$encoding" = uuencode ]; then
+		$encoder "$1" "$2"
+	else
+		$encoder "$1"
+	fi
+}
+
+f_ascattach() {
+	# RFC 2045 states: it is EXPRESSLY FORBIDDEN to use any encodings
+	# other than "7bit", "8bit", or "binary" with any composite media type,
+	# i.e. one that recursively includes other Content-Type fields.
+	# Currently the only composite media types are "multipart" and "message". 
+	if [	"$(f_lowercase $charset)" = us-ascii		\
+	-o	"$contenttype" != "${contenttype#message/}"	\
+	-o	"$contenttype" != "${contenttype#multipart/}"	];
+	then
+		f_echo "Content-Transfer-Encoding: 7bit"
+		f_echo
+#		f_onlcr "$1"
+		cat "$1"
+	else
+		f_echo "Content-Transfer-Encoding: quoted-printable"
+		f_echo
+		f_qpencode_file "$1"
+	fi
+}
+
+f_attachit() {
+	let attno=attno+1
+	if [ "$spec_filename" -o "$inline_attachment" = attachment ]; then
+		namespec="; name=\"$neatname\""
+		fnamespec="; name=\"$neatname\""
+	else
+		namespec=
+		fnamespec=
+	fi
+	f_echo "--$boundary"
+	f_echo "Content-ID: <$(f_contentid "$fname")>"
+	f_echo "Content-Disposition: $inline_attachment$fnamespec"
+	case "$ascbin" in
+		a)	f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+			f_ascattach "$fname" "$neatname"
+			;;
+		b)	f_echo "Content-Type: $contenttype$namespec"
+			f_binattach "$fname" "$neatname"
+			;;
+		8)	f_echo "Content-Type: $contenttype$namespec"
+			f_echo "Content-Transfer-Encoding: 8bit"
+			f_echo
+			cat "$fname"
+			;;
+	esac
+}
+
+f_attachment() { # type a/b
+	contenttype="$1"
+	ascbin="$2"
+	if [ "$contenttype" = default ]; then
+		if [ "$inline_attachment" = inline ]; then
+			contenttype=text/plain
+			ascbin=a
+		else
+			contenttype=application/octet-stream
+		fi
+	fi
+	if [ "$ascbin" = 8 -a -z "${allow8bit#0}" ]; then
+		ascbin=b
+	fi
+	if [ "X$fname" = X- ]; then
+		f_termmess
+		neatname=stdin
+	elif [ ! -r "$fname" ]; then
+		f_echo "$argv0: Cannot read \"$fname\": not attaching" >&2
+		return
+#		read ans?"Send mail anyway? (n) "
+#		if [ -z "$force" ]; then
+#			exit
+#		else
+#			return
+#		fi
+	else
+		neatname="$(basename "$fname")"
+	fi
+	f_attachit
+}
+
+f_process_all_files() {
+	for fname in "$@"; do
+		if [ -z "${end_opts#0}" ]; then
+			if [ "$charset_coming_up" ]; then
+				charset="$fname"
+				charset_coming_up=
+				continue
+			elif [ "x${fname#-C}" != "x$fname" ]; then
+				charset="${fname#-C}"
+				if [ -z "$charset" ]; then
+					charset_coming_up=1
+				fi
+				continue
+			elif [ "x${fname#-[muq]}" != "x$fname" ]; then
+				f_select_encoder ${fname#-}
+				continue
+			elif [ "x$fname" = x-- ]; then
+				end_opts=1
+				continue
+			fi
+		fi
+		f_process_one_file
+		if [ "$inline_attachment" = inline -a "$mixed_alternative" != alternative ]; then
+			inline_attachment=attachment
+		fi
+	done
+}
+
+f_process_one_file() {
+	case "$(f_lowercase "$fname")" in
+		# scripts/html/text
+		*.txt|*.sql|*.log)	f_attachment text/plain				a ;;
+		*.bash|*.tcsh|*.awk)	f_attachment text/plain				a ;;
+		*.sh|*.[kcz]sh)		f_attachment text/plain				a ;;
+		*.[ch]|*.c++|*.cpp)	f_attachment text/plain				a ;;
+		*.cc|*.p[mly])		f_attachment text/plain				a ;;
+		*.java|*.[pb]as)	f_attachment text/plain				a ;;
+		*.f|*.f77|*.f90|*.for)	f_attachment text/plain				a ;;
+		*.xml)			f_attachment text/xml				a ;;
+		*.[sh]tm|*.html)	f_attachment text/html				a ;;
+		*.[ps]html)		f_attachment text/html				a ;;
+		*.sgm|*.sgml)		f_attachment text/sgml				a ;;
+		*.css)			f_attachment text/css				a ;;
+		*.rtx)			f_attachment text/richtext			a ;;
+		# image formats
+		*.jp[eg]|*.jpeg|*.jfif)	f_attachment image/jpeg				b ;;
+		*.gif)			f_attachment image/gif				b ;;
+		*.tif|*.tiff)		f_attachment image/tiff				b ;;
+		*.png)			f_attachment image/png				b ;;
+		*.bmp)			f_attachment image/x-bitmap			b ;;
+		*.xbm)			f_attachment image/x-xbitmap			b ;;
+		*.xwd)			f_attachment image/x-xwd			b ;;
+		*.xpm)			f_attachment image/x-xpixmap			b ;;
+		*.xwd)			f_attachment image/x-xwindowdump		b ;;
+		*.pnm)			f_attachment image/x-portable-anymap		b ;;
+		*.ppm)			f_attachment image/x-portable-pixmap		b ;;
+		*.pbm)			f_attachment image/x-portable-bitmap		b ;;
+		*.pgm)			f_attachment image/x-portable-graymap		b ;;
+		*.pct|*.pic|*.pict)	f_attachment image/pict				b ;;
+		*.ico)			f_attachment image/x-icon			b ;;
+		# archive formats
+		*.arj|*.a[0-9][0-9])	f_attachment application/arj			b ;;
+		*.rar|*.r[0-9][0-9])	f_attachment application/x-rar-compressed	b ;;
+		*.cab)			f_attachment application/x-cab-compressed	b ;;
+		*.7z)			f_attachment application/x-7z-compressed	b ;;
+		*.arc)			f_attachment application/x-arc			b ;;
+		*.lha)			f_attachment application/x-lha			b ;;
+		*.lzh)			f_attachment application/x-lzh			b ;;
+		*.zip)			f_attachment application/zip			b ;;
+		*.z|*.taz)		f_attachment application/x-compress		b ;;
+		*.gz|*.tgz)		f_attachment application/x-gzip			b ;;
+		*.bz2)			f_attachment application/x-bzip2		b ;;
+		*.cpio)			f_attachment application/x-cpio			b ;;
+		*.rpm)			f_attachment application/x-rpm			b ;;
+		*.tar)			f_attachment application/x-tar			b ;;
+		*.deb|*.ar)		f_attachment application/x-ar			b ;;
+		*.hqx)			f_attachment application/mac-binhex40		b ;;
+		*.sit)			f_attachment application/x-stuffit		b ;;
+		*.ync)			f_attachment application/x-yenc-encoded		8 ;;
+		*.shar)			f_attachment application/x-shar			a ;;
+		*.uu|*.uue)		f_attachment text/x-uuencode			a ;;
+		# audio formats
+		*.mid|*.midi|*.rmi)	f_attachment audio/midi				b ;;
+		*.mp3)			f_attachment audio/mpeg				b ;;
+		*.m3u)			f_attachment audio/x-mpegurl			b ;;
+		*.au|*.snd)		f_attachment audio/basic			b ;;
+		*.wav)			f_attachment audio/x-wav			b ;;
+		*.voc)			f_attachment audio/x-voc			b ;;
+		*.aif|*.aif[fc])	f_attachment audio/x-aiff			b ;;
+		*.ram|*.rm)		f_attachment audio/x-pn-realaudio		b ;;
+		*.ra)			f_attachment audio/x-realaudio			b ;;
+		# video formats
+		*.mp[aeg2]|*.mpeg)	f_attachment video/mpeg				b ;;
+		*.qt|*.mov)		f_attachment video/quicktime			b ;;
+		*.avi)			f_attachment video/x-msvideo			b ;;
+		*.fli)			f_attachment video/x-fli			b ;;
+		*.as[frx])		f_attachment video/x-ms-asf			b ;;
+		# document formats
+		*.do[ct]|*.wri|*.rtf)	f_attachment application/msword			b ;;
+		*.wp|*.wp[56])		f_attachment application/wordperfect		b ;;
+		*.pot|*.pp[st])		f_attachment application/vnd.ms-powerpoint	b ;;
+		*.xl[acdklmstvw])	f_attachment application/vnd.ms-excel		b ;;
+		*.wcm|*.wdb|*.w[kp]s)	f_attachment application/vnd.ms-works		b ;;
+		*.mpp)			f_attachment application/vnd.ms-project		b ;;
+		*.mdb)			f_attachment application/x-msaccess		b ;;
+		*.hlp)			f_attachment application/x-winhelp		b ;;
+		*.swf)			f_attachment application/x-shockwave-flash	b ;;
+		*.pdf)			f_attachment application/pdf			b ;;
+		*.ai|*.ps|*.eps)	f_attachment application/postscript		b ;;
+		*.dvi)			f_attachment application/x-dvi			b ;;
+		*.[1-8]|*.1m)		f_attachment application/x-troff		a ;;
+		*.3pm|*.m[mse])		f_attachment application/x-troff		a ;;
+		*.roff|*.man|*.t|*.tr)	f_attachment application/x-troff		a ;;
+		*.tex)			f_attachment application/x-tex			a ;;
+		*.texi|*.texinfo)	f_attachment application/x-texinfo		a ;;
+		*.js)			f_attachment application/x-javascript		a ;;
+		*.latex)		f_attachment application/x-latex		a ;;
+		*.pdb)			f_attachment chemical/x-pdb			a ;;
+		*.pov)			f_attachment model/x-pov			a ;;
+		# mail
+		*.p10)			f_attachment application/pkcs10			b ;;
+		*.p12|*.pfx)		f_attachment application/pkcs12			b ;;
+		*.p7b|*.spc)		f_attachment application/pkcs7-certificates	b ;;
+		*.p7[cm])		f_attachment application/pkcs7-mime		b ;;
+		*.p7r)			f_attachment application/pkcs7-certreqresp	b ;;
+		*.p7s)			f_attachment application/pkcs7-signature	b ;;
+		*.[cd]er|*.crt) 	f_attachment application/x-x509-ca-cert		a ;;
+		*.mht|*.mhtm|*.mhtml)	f_attachment message/rfc822			a ;;
+		*.nws|*.news|*.eml)	f_attachment message/rfc822			a ;;
+		*.vcf)			f_attachment text/x-vcard			a ;;
+		# default
+		-)			f_attachment text/plain				a ;;
+		*)			f_attachment default				b ;;
+	esac
+}
+
+############################################################################
+# main
+
+f_initialize "${argv0:=$(basename $0)}"
+
+while getopts "8C:H:IR:ab:c:df:himqr:s:uv" currentopt; do
+	case $currentopt in
+		8)	allow8bit=1
+			;;
+		C)	charset="$OPTARG"
+			;;
+		H)	if [ "$headerlines" ]; then
+				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
+			else
+				headerlines="$OPTARG"
+			fi
+			;;
+		I)	inline_attachment=inline
+			;;
+		a)	inline_attachment=inline
+			mixed_alternative=alternative
+			;;
+		d)	MAILATT_DEBUG=1
+			;;
+		[muq])	f_select_encoder $currentopt
+			;;
+		[bcfrR]) f_add_addresses "$OPTARG"
+			;;
+		h)	f_usage
+			exit 0
+			;;
+		i)	inline_attachment=inline
+			unset spec_filename
+			;;
+		s)	subject="Subject: $(f_encode_header "$OPTARG")"
+			;;
+		v)	f_version
+			exit 0
+			;;
+		*)	f_echo "$argv0: Invalid option: $currentopt" 1>&2
+			exit 1
+			;;
+	esac
+done
+
+if eval "test \"x\$$((OPTIND-1))\"" = 'x--'; then
+	end_opts=1
+fi
+
+shift $((OPTIND-1))
+
+#f_test_argc $#
+
+f_composemail "$@" | f_sendmail
+
+exit $?
+
+############################################################################
+# documentation
+
+=pod
+
+=for section 1
+
+=head1 NAME
+
+mailatt - send e-mail with attachments
+
+=head1 SYNOPSIS
+
+C<mailatt>
+S<<	C<[ -r >I<recipients>C< ]>		>>
+S<<	C<[ -c >I<cc-addresses>C< ]>		>>
+S<<	C<[ -b >I<bcc-addresses>C< ]>		>>
+S<<	C<[ -f >I<from>C< ]>			>>
+S<<	C<[ -R >I<reply-to-addresses>C< ]>	>>
+S<<	C<[ -s >I<subject>C< ]>			>>
+S<<	C<[ -H >I<headerline>C< ]>		>>
+S<<	C<[ -8Iadimqu ]>			>>
+S<<	C<[ -C >I<charset>C< ]>			>>
+S<<	C<[ >I<file1 .. filen>C< ]>		>>
+
+C<mailatt { -h | -v }>
+
+=head1 DESCRIPTION
+
+B<mailatt> is used to send multipart MIME e-mail with file attachments
+of any format.
+
+=over 3
+
+=item -
+
+Files of type I<text/*> in US-ASCII will be attached as-is (7bit-encoded).
+
+Plaintext files are supposed to be clean 7-bit ASCII unless another character
+set has been specified on the commandline.  See the B<-C> option below.
+
+=item -
+
+Files of type I<text/*> in a character set other than US-ASCII will be
+attached using quoted-printable encoding.
+
+=item -
+
+Binary files will be attached base64-encoded by default (but see the B<-q>
+and B<-u> options below).
+
+=item -
+
+If explicitly requested, yEncoded files (F<*.ync>) will be attached as-is
+(8bit-encoded).  Note that not all Mail Transfer Agents can handle this
+type of transfer cleanly. See the B<-8> option below.
+
+=back
+
+B<mailatt> can send messages in two possible formats.  I<multipart/mixed>
+is used to send a collection of files which are not necessarily related.
+I<multipart/alternative> is used to provide alternative representations
+of the same message (I<e.g.> plain text and HTML), in which case the mail
+client can select one to present.  See also the B<-a> option below.
+
+=for roff
+.PP \" display the 'pertains to'-macro
+.Vp \*(Vw \
+
+=head1 OPTIONS
+
+=over 4
+
+=item -8
+
+Include certain MIME types (currently only yEncoded files) using 8bit
+encoding.  The default is to include all binary files using base64 encoding.
+The reason for allowing this is that yEncoded files are supposed to
+use less bandwidth. This method is, however, not supported by all Mail
+Transfer Agents.
+
+=item -C I<charset>
+
+This option may be used multiple times, and in any position on the
+commandline.  It specifies the character set to be used for all subsequent
+attachments and header lines.  If unspecified, US-ASCII is used.
+See the EXAMPLES below.
+
+=item -H I<headerline>
+
+Specifies a line to add to the mail header. The option can be used
+multiple times. Do not end the line with a newline character.
+
+=item -I
+
+This option is nearly identical to B<-i>, but uses the "old" behavior,
+which is to include a filename for all MIME parts, even those that are
+attached using C<Content-Disposition: inline>.
+
+Some e-mail clients may not display MIME parts correctly when this option
+is used. It is provided only for backward-compatibility.
+
+Do not use. Use B<-i> instead.
+
+=item -R I<addr1>[,I<addr2..>]
+
+Specify Reply-To: addresses for the e-mail. See B<-r> for allowed formats.
+
+=item -a
+
+Use I<multipart/alternative> for the mail message instead of the default
+I<multipart/mixed>.  All message parts will automatically be included
+with C<Content-Disposition: inline>, regardless of any B<-i> option.
+Note that the simplest representation of the mail (probably I<text/plain>)
+should be attached first.
+
+=item -b I<addr1>[,I<addr2..>]
+
+Specify Bcc: addresses for the e-mail. See B<-r> for allowed formats.
+
+=item -c I<addr1>[,I<addr2..>]
+
+Specify Cc: addresses for the e-mail. See B<-r> for allowed formats.
+
+=item -d
+
+For debugging purposes only. The composed mail will be printed on I<stdout>
+instead of actually being sent. This option takes precedence over the
+MAILATT_DEBUG variable (see below).
+
+=item -f I<addr1>
+
+Specify From: address for the e-mail.
+
+=item -h
+
+Print help (usage information) and exit.
+
+=item -i
+
+Specifies that the first file on the commandline must be forcibly included
+with a C<Content-Disposition: inline> header, and without a filename.
+If this option is not specified, all parts of the message will be included
+with C<Content-Disposition: attachment> and a specified filename.
+
+The option B<-a> takes precedence over B<-i>.
+
+See also the B<-I> option.
+
+=item -m
+
+This option may be used multiple times, and in any position on the
+commandline.  It indicates that base64 encoding should be used for all
+subsequent binary attachments and header lines.  This is the default
+if unspecified.
+
+=item -q
+
+This option may be used multiple times, and in any position on the
+commandline.  It indicates that quoted-printable encoding should be used
+for all binary attachments and header lines.  Although quoted-printable
+is normally only used for ASCII attachments, B<mailatt>'s implementation
+will make binaries come through intact.
+
+=item -r I<addr1>[,I<addr2..>]
+
+Specify recipients (To: addresses) for the e-mail.
+
+Each one of the addresses may be specified in one of the following
+formats:
+
+=over 4
+
+=over
+
+=item I<user>
+
+=item <I<user>>
+
+=item <I<user>@I<domain>>
+
+=item I<name> <I<user>>
+
+=item I<name> <I<user>@I<domain>>
+
+=back
+
+=back
+
+The first two forms will be expanded (using the system F<passwd> file or (if
+configured) the NIS F<passwd> map) to the form "I<name>S< ><I<user>>", which
+the mailer system may further expand to "I<name>S< ><I<user>@I<domain>>".
+
+=item -s I<subject>
+
+Specify subject for the e-mail.
+
+=item -u
+
+This option may be used multiple times, and in any position on the
+commandline.  It indicates that uuencode should be used for all binary
+attachments.  Warning: uuencode is reportedly not 100 percent portable.
+
+=item -v
+
+Display version information and exit.
+
+=item I<file1> [ I<file2>.. ]
+
+Indicate which files should be attached to the mail.  Depending on the
+"extension" (I<i.e.> the filename part following a C<.> in the filename),
+a corresponding MIME type will be selected from a built-in list.
+
+If the file type is not known or the extension is empty, the file will be
+sent as type I<application/octet-stream>, unless the B<-a> or B<-i>
+option requires it to be included inline.  In that case, the MIME type
+will forcibly be changed to I<text/plain>.
+
+At most one of the filenames may be specified as a single C<-> (minus),
+which will cause B<mailatt> to read a document from stdin. If entered
+interactively, such a document should be ended with the I<eof>-character
+(usually CTRL-D). B<mailatt> will always assume that this document is of
+type I<text/plain>.
+
+=back
+
+=head1 EXAMPLES
+
+Send all F<*.eps> files to two recipients:
+
+  mailatt -s'Filesystem usage' -r alexander,maxima fsgraph-*.eps
+
+Send a file fragment, carbon copy to the sysadmin (possibly forwarded by
+a F<.forward> file):
+
+  mailatt -s'Fragment 2/10' -r beatrix -c root dumps.tar.gz.xab
+
+Send a formatted file, preceded by an introductory message, typed
+interactively:
+
+  mailatt -s'Sendmail manual' -r sysadmin@domain.nl -i - sendmail.pdf
+  Hello Bernhard,
+  Here is the sendmail manual I promised.
+  ^D
+
+Send a formatted mail in HTML format, specifying a From: address:
+
+  mailatt -f 'Pieter <pvvollenhoven@hotmail.com>' -r margriet
+          -i birthdaycard.html
+
+Send a mail in both plain text and HTML format:
+
+  mailatt -a -r constantijn,friso -s greeting.txt greeting.html
+
+Attach a file of unknown MIME type using quoted-printable encoding (I<e.g.>
+to increase readability).  This overrules the default encoding (base64)
+that is used for attachments of unknown MIME type coming I<before> the
+B<-q> option.
+
+  mailatt -r christina -s "config files" -i body.txt
+          /etc/sendmail.cf -q /etc/hosts
+
+Send a mail using the Cyrillic character set to multiple addresses:
+
+  mailatt -r 'Mr. Putin <putin@kremlin.ru>,root'
+          -s 'Important letter' -i -C ISO-8859-5 letter.txt
+
+Add custom lines to the mail header:
+
+  mailatt -r 'Benedictus_XVI@vatican.va' -s 'Oldest translation'
+          -i -H "X-Year-Finished: 1637" message.txt SV.pdf
+
+Send a mail with mixed character sets:
+
+=for roff
+.PP
+.Vb 2
+.ie \n(.g \{\
+\&  mailatt -C ISO-8859-15 -r 'Fran\(,cois <francois@nimporte.ou>'
+\&          -s 'All\(^o' -C UTF-8 -i message.html -C windows-1253 m.txt
+.\}
+.el \{\
+\&  mailatt -C ISO-8859-15 -r 'Franc\*,ois <francois@nimporte.ou>'
+\&          -s 'Allo\*^' -C UTF-8 -i message.html -C windows-1253 m.txt
+.\}
+.Ve
+.PP \
+
+=head1 ENVIRONMENT
+
+=over 4
+
+=item MAILATT_DEBUG
+
+For debugging purposes only. If set and not B<0>, causes the composed mail
+to be printed on I<stdout> instead of actually being sent.
+
+=back
+
+=head1 BUGS and WARNINGS
+
+An HTML-file cannot be included using input redirection, as its type will
+be reported in the mail as I<text/plain>. Attach it by filename instead.
+
+=head1 VERSION
+
+=for roff
+.PP \" display the 'pertains to'-macro
+.Vp \*(Vw \
+
+=head1 SEE ALSO
+
+mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
+
+=over 10
+
+=item RFC 822:
+
+Format of Internet Text Messages
+
+=item RFC 1049:
+
+The Content-Type Header Field for Internet Messages
+
+=item RFC 2045:
+
+MIME: Format of Internet Message Bodies
+
+=item RFC 2046:
+
+MIME: Media Types
+
+=item RFC 2047:
+
+MIME: Message Header Extensions for Non-ASCII Text
+
+=item RFC 2183:
+
+The Content-Disposition Header Field
+
+=item RFC 2387:
+
+The multipart/related Content-Type
+
+=item RFC 2392:
+
+Content-ID and Message-ID URLs
+
+=item RFC 2822:
+
+Internet Message Format
+
+=for author only: RFC 2646: The text/plain Format parameter
+
+=back
+
+=head1 AUTHOR
+
+=for roff
+.\" the \(co macro only exists in groff
+.ie \n(.g Copyright \(co \*(Yr, Ren\('e
+.el       Copyright (c) \*(Yr, Rene\*'
+Uittenbogaard (ruittenb@users.sourceforge.net)
+
+=cut
+
