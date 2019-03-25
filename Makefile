@@ -76,9 +76,15 @@ test: $(PROG) ## Run simple test
 	@echo | ./$(PROG) -d - |                                        \
 		grep '^Content-Disposition: attachment' >$(NULL) &&     \
 		echo 'Test 11 succesful (content-disposition)'
+	@echo | ./$(PROG) -d -i -M text/html - |                        \
+		grep '^Content-Type: text/html' >$(NULL) &&             \
+		echo 'Test 12 succesful (mime type)'
+	@echo | ./$(PROG) -d -i -M application/x-pdf - |                \
+		grep '^Content-Type: application/x-pdf' >$(NULL) &&     \
+		echo 'Test 13 succesful (mime type)'
 	@echo $(BODY) | ./$(PROG) -d -i - |                             \
 		grep '^'$(BODY) >$(NULL) &&                             \
-		echo 'Test 12 succesful (body)'
+		echo 'Test 14 succesful (body)'
 
 .PHONY: install
 install: $(PROG) ## Copy binary and manpage to system directories
