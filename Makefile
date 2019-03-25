@@ -43,25 +43,25 @@ $(PROG).pdf: $(PROG).ps
 
 .PHONY: test
 test: $(PROG) ## Run simple test
-	@./$(PROG) -d -r $(TO) |                                        \
+	@./$(PROG) -d |                                                 \
 		grep '^Content-Type: multipart/mixed' >$(NULL) &&       \
 		echo 'Test  1 succesful (content-type)'
-	@./$(PROG) -d -r $(TO) -a |                                     \
+	@./$(PROG) -d -a |                                              \
 		grep '^Content-Type: multipart/alternative' >$(NULL) && \
 		echo 'Test  2 succesful (content-type)'
 	@./$(PROG) -d -r $(TO) |                                        \
 		grep '^To: '$(TO) >$(NULL) &&                           \
 		echo 'Test  3 succesful (recipient)'
-	@./$(PROG) -d -r $(TO) -c $(CC) |                               \
+	@./$(PROG) -d -c $(CC) |                                        \
 		grep '^Cc: <$(CC)>' >$(NULL) &&                         \
 		echo 'Test  4 succesful (cc)'
-	@./$(PROG) -d -r $(TO) -f $(FROM) |                             \
+	@./$(PROG) -d -f $(FROM) |                                      \
 		grep '^From: <$(FROM)>' >$(NULL) &&                     \
 		echo 'Test  5 succesful (from)'
-	@./$(PROG) -d -r $(TO) -s $(SUBJECT) |                          \
+	@./$(PROG) -d -s $(SUBJECT) |                                   \
 		grep '^Subject: '$(SUBJECT) >$(NULL) &&                 \
 		echo 'Test  6 succesful (subject)'
-	@./$(PROG) -d -r $(TO) -H $(HEADER) |                           \
+	@./$(PROG) -d -H $(HEADER) |                                    \
 		grep '^'$(HEADER) >$(NULL) &&                           \
 		echo 'Test  7 succesful (header)'
 	@./$(PROG) -d -C $(CHARSET) -q -r $(TO) |                       \
@@ -70,13 +70,13 @@ test: $(PROG) ## Run simple test
 	@./$(PROG) -d -C $(CHARSET) -m -r $(TO) |                       \
 		grep '^To: =?ISO-8859-15?B?UmVjaXBpZW50?= ' >$(NULL) && \
 		echo 'Test  9 succesful (content-transfer-encoding)'
-	@echo | ./$(PROG) -d -r $(TO) -i - |                            \
+	@echo | ./$(PROG) -d -i - |                                     \
 		grep '^Content-Disposition: inline' >$(NULL) &&         \
 		echo 'Test 10 succesful (content-disposition)'
-	@echo | ./$(PROG) -d -r $(TO) - |                               \
+	@echo | ./$(PROG) -d - |                                        \
 		grep '^Content-Disposition: attachment' >$(NULL) &&     \
 		echo 'Test 11 succesful (content-disposition)'
-	@echo $(BODY) | ./$(PROG) -d -r $(TO) -i - |                    \
+	@echo $(BODY) | ./$(PROG) -d -i - |                             \
 		grep '^'$(BODY) >$(NULL) &&                             \
 		echo 'Test 12 succesful (body)'
 
