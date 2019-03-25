@@ -1,9 +1,9 @@
-#!/usr/local/bin/bash
+#!/bin/ksh
 #
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.14
+# Version:	1.14.1
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -16,6 +16,7 @@
 #
 # TODO:		test: unfolded header lines
 #		test: send yenc with -8
+#		feat: make -8 less magic and always acceptable
 #		bug?: convert to crlf for qp? f_onlcr?
 #		feat: implement multipart/related using content-id?
 #		feat: mailatt_args in header
@@ -36,7 +37,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14
+.ds Vw @(#) mailatt 1.14.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -67,13 +68,13 @@ f_setpath() {
 }
 
 f_findawk() {
-	if f_which gawk >/dev/null 2>&1; then
+	if f_has gawk; then
 		awk=gawk
 	elif [ -x /usr/xpg4/bin/awk ]; then
 		awk=/usr/xpg4/bin/awk
-	elif f_which mawk >/dev/null 2>&1; then
+	elif f_has mawk; then
 		awk=mawk
-	elif f_which nawk >/dev/null 2>&1; then
+	elif f_has nawk; then
 		awk=nawk
 	else
 		awk=awk
@@ -101,11 +102,13 @@ f_version() {
 }
 
 f_getusername() {
-	# find name from password file (GCOS field)
+	# find name from password file (GCOS field) or NIS
 	{
-		if f_which domainname && test "`domainname 2>/dev/null`"; then
+		# Is NIS active? Then give it preference over local passwd
+		if f_has domainname && test "`domainname 2>/dev/null`"; then
 			ypmatch "$1" passwd 2>/dev/null
 		fi
+		# Always consult local passwd
 		cat /etc/passwd
 	} | $awk -F: '$1 == "'"$1"'" { sub(/,.*/, "", $5); print $5 }'
 }
@@ -119,17 +122,12 @@ f_lowercase() {
 	f_echo "$@" | tr A-Z a-z
 }
 
-f_test_argc() {
-	if [ $1 -lt 1 ]; then
-		f_usage 1>&2
-		exit 1
-	fi
-}
-
-f_which() {
-	# built-in "which" does not always set $? correctly
+f_has() {
+	# The built-in "which" does not always set $? correctly and cannot always be silenced.
+	# This function is completely silent.
+	# This tr(1) invocation is safe because directories in PATH cannot contain colons.
 	for i in $(echo $PATH | tr : " "); do
-		[ -x "$i/$1" ] && return 0
+		test -x "$i/$1" 2>/dev/null && return 0
 	done
 	return 1
 }
@@ -138,14 +136,6 @@ f_find_cid_data() {
 	cidtime="$(date +"%Y%m%d%H%M%S")"
 	cidrandom="`f_boundbits`"
 	cidhost="$(hostname)" 2>/dev/null
-}
-
-f_escapeperiods() {
-	# apparently not needed
-	$awk '{
-		if (/^\./) print "." $0
-		else	   print
-	}' "$1"
 }
 
 f_onlcr() {
@@ -386,7 +376,7 @@ f_dissect() {
 
 f_select_encoder() {
 	case "$1" in
-		u)	if f_which uuencode >/dev/null 2>&1; then
+		u)	if f_has uuencode; then
 				encoding=uuencode
 				encoder=uuencode
 				hencoding=B
@@ -779,8 +769,6 @@ fi
 
 shift $((OPTIND-1))
 
-#f_test_argc $#
-
 f_composemail "$@" | f_sendmail
 
 exit $?
@@ -834,8 +822,9 @@ attached using quoted-printable encoding.
 
 =item -
 
-Binary files will be attached base64-encoded by default (but see the B<-q>
-and B<-u> options below).
+Binary files (I<i.e.> files having MIME types other than I<text/*>) will
+be attached base64-encoded by default (but see the B<-q> and B<-u> options
+below).
 
 =item -
 
@@ -881,10 +870,10 @@ This option is nearly identical to B<-i>, but uses the "old" behavior,
 which is to include a filename for all MIME parts, even those that are
 attached using C<Content-Disposition: inline>.
 
-Some e-mail clients may not display MIME parts correctly when this option
-is used. It is provided only for backward-compatibility.
+B<Warning:> not all e-mail clients support this.  This option is
+provided only for backward-compatibility.
 
-Do not use. Use B<-i> instead.
+The use of this option is discouraged; use B<-i> instead.
 
 =item -M I<mime-type>
 
@@ -935,8 +924,6 @@ If this option is not specified, all parts of the message will be included
 with C<Content-Disposition: attachment> and a specified filename.
 
 The option B<-a> takes precedence over B<-i>.
-
-See also the B<-I> option.
 
 =item -m
 
@@ -994,9 +981,13 @@ Specify subject for the e-mail.
 
 =item -u
 
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that uuencode should be used for all binary
-attachments.  Warning: uuencode is reportedly not 100 percent portable.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that uuencode should be used as Content-Transfer-Encoding
+for all binary attachments.
+
+B<Warning:> not all e-mail clients support this.
+
+The use of this option is discouraged; use B<-m> instead.
 
 =item -v
 

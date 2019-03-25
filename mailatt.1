@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14
+.ds Vw @(#) mailatt 1.14.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -171,8 +171,9 @@ set has been specified on the commandline.  See the \fB\-C\fR option below.
 Files of type \fItext/*\fR in a character set other than US-ASCII will be
 attached using quoted-printable encoding.
 .IP "\-" 3
-Binary files will be attached base64\-encoded by default (but see the \fB\-q\fR
-and \fB\-u\fR options below).
+Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
+be attached base64\-encoded by default (but see the \fB\-q\fR and \fB\-u\fR options
+below).
 .IP "\-" 3
 If explicitly requested, yEncoded files (\fI*.ync\fR) will be attached as-is
 (8bit\-encoded).  Note that not all Mail Transfer Agents can handle this
@@ -208,10 +209,10 @@ This option is nearly identical to \fB\-i\fR, but uses the \*(L"old\*(R" behavio
 which is to include a filename for all \s-1MIME\s0 parts, even those that are
 attached using \f(CW\*(C`Content\-Disposition: inline\*(C'\fR.
 .Sp
-Some e\-mail clients may not display \s-1MIME\s0 parts correctly when this option
-is used. It is provided only for backward-compatibility.
+\&\fBWarning:\fR not all e\-mail clients support this.  This option is
+provided only for backward-compatibility.
 .Sp
-Do not use. Use \fB\-i\fR instead.
+The use of this option is discouraged; use \fB\-i\fR instead.
 .IP "\-M \fImime-type\fR" 4
 .IX Item "-M mime-type"
 Specifies the \s-1MIME\s0 type to be used for the following file. If not
@@ -253,8 +254,6 @@ If this option is not specified, all parts of the message will be included
 with \f(CW\*(C`Content\-Disposition: attachment\*(C'\fR and a specified filename.
 .Sp
 The option \fB\-a\fR takes precedence over \fB\-i\fR.
-.Sp
-See also the \fB\-I\fR option.
 .IP "\-m" 4
 .IX Item "-m"
 This option may be used multiple times, and in any position on the
@@ -309,9 +308,13 @@ is for programs like \fIsendmail\fR\|(1).
 Specify subject for the e\-mail.
 .IP "\-u" 4
 .IX Item "-u"
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that uuencode should be used for all binary
-attachments.  Warning: uuencode is reportedly not 100 percent portable.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that uuencode should be used as Content-Transfer-Encoding
+for all binary attachments.
+.Sp
+\&\fBWarning:\fR not all e\-mail clients support this.
+.Sp
+The use of this option is discouraged; use \fB\-m\fR instead.
 .IP "\-v" 4
 .IX Item "-v"
 Display version information and exit.
