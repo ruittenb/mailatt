@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.14.1
+# Version:	1.14.2
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -37,7 +37,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14.1
+.ds Vw @(#) mailatt 1.14.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -54,10 +54,9 @@ f_initialize() {
 	f_select_encoder m
 	f_find_cid_data
 	attno=0
-	spec_filename=1
 	charset=us-ascii
-	mixed_alternative=mixed
-	inline_attachment=attachment
+	mixed_or_alternative=mixed
+	inline_or_attachment=attachment
 	allow8bit=0
 }
 
@@ -93,7 +92,7 @@ f_usage() {
 	f_echo "Usage: $argv0 [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]"
 	f_echo "\t\t[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]"
 	f_echo "\t\t[ -H <headerline> ] [ -8Iadimqu ]"
-	f_echo "\t\t[ -C <charset> ] [ <file1> .. <filen> ]"
+	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
 	f_echo "       $argv0 { -h | -v }"
 }
 
@@ -425,7 +424,7 @@ f_startmail() {
 	boundary="Mailatt=Part:$RANDOM.$(f_boundbits)+$(f_boundbits)/"
 	cat <<-_MIME_header_preamble_
 		MIME-Version: 1.0
-		Content-Type: multipart/$mixed_alternative; boundary="$boundary"
+		Content-Type: multipart/$mixed_or_alternative; boundary="$boundary"
 		X-Mailer: $(f_version)
 		
 		This is a multipart message in MIME format.
@@ -488,7 +487,7 @@ f_ascattach() {
 
 f_attachit() {
 	let attno=attno+1
-	if [ "$spec_filename" -o "$inline_attachment" = attachment ]; then
+	if [ "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
 		namespec="; name=\"$neatname\""
 		fnamespec="; name=\"$neatname\""
 	else
@@ -497,7 +496,7 @@ f_attachit() {
 	fi
 	f_echo "--$boundary"
 	f_echo "Content-ID: <$(f_contentid "$fname")>"
-	f_echo "Content-Disposition: $inline_attachment$fnamespec"
+	f_echo "Content-Disposition: $inline_or_attachment$fnamespec"
 	case "$ascbin" in
 		a)	f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
 			f_ascattach "$fname" "$neatname"
@@ -517,7 +516,7 @@ f_attachment() { # type a/b
 	contenttype="$1"
 	ascbin="$2"
 	if [ "$contenttype" = default ]; then
-		if [ "$inline_attachment" = inline ]; then
+		if [ "$inline_or_attachment" = inline ]; then
 			contenttype=text/plain
 			ascbin=a
 		else
@@ -531,14 +530,14 @@ f_attachment() { # type a/b
 		f_termmess
 		neatname=stdin
 	elif [ ! -r "$fname" ]; then
-		f_echo "$argv0: Cannot read \"$fname\": not attaching" >&2
-		return
-#		read ans?"Send mail anyway? (n) "
-#		if [ -z "$force" ]; then
-#			exit
-#		else
-#			return
-#		fi
+		f_echo "$argv0: Cannot attach \"$fname\": file not readable" >&2
+		f_echon "Send mail anyway? (y/n) [n] " >&2
+		read ans < /dev/tty
+		if [ "${ans#n}" != "$ans" -o -z "$ans" ]; then
+			exit 2
+		else
+			return
+		fi
 	else
 		neatname="$(basename "$fname")"
 	fi
@@ -582,9 +581,11 @@ f_process_all_files() {
 		f_process_one_file "$opt" $mimetype
 		mimetype=
 
-		# switch content-disposition from inline to attachment if necessary
-		if [ "$inline_attachment" = inline -a "$mixed_alternative" != alternative ]; then
-			inline_attachment=attachment
+		# switch content-disposition for all following files
+		# from inline to attachment if multipart/mixed,
+		# but not for multipart/alternative
+		if [ "$mixed_or_alternative" != alternative ]; then
+			inline_or_attachment=attachment
 		fi
 	done
 }
@@ -733,12 +734,14 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 				headerlines="$OPTARG"
 			fi
 			;;
-		I)	inline_attachment=inline
+		I)	inline_or_attachment=inline
+			specify_inline_filename=1
 			;;
 		M)	mimetype="$OPTARG"
 			;;
-		a)	inline_attachment=inline
-			mixed_alternative=alternative
+		a)	inline_or_attachment=inline
+			specify_inline_filename=
+			mixed_or_alternative=alternative
 			;;
 		d)	MAILATT_DEBUG=1
 			;;
@@ -749,8 +752,8 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 		h)	f_usage
 			exit 0
 			;;
-		i)	inline_attachment=inline
-			unset spec_filename
+		i)	inline_or_attachment=inline
+			specify_inline_filename=
 			;;
 		s)	subject="Subject: $(f_encode_header "$OPTARG")"
 			;;
@@ -758,6 +761,7 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 			exit 0
 			;;
 		*)	f_echo "$argv0: Invalid option: $currentopt" 1>&2
+			f_usage
 			exit 1
 			;;
 	esac
