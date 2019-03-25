@@ -3,15 +3,15 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.13.2
+# Version:	1.14
 # Created:	2011-02-11
-# Date:		2019-03-23
+# Date:		2019-03-25
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
 #			[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]
 #			[ -H <headerline> ] [ -8Iadimqu ]
-#			[ -C <charset> ] [ <file1> .. <filen> ]
+#			[ -C <charset> ] [ -M mimetype ] [ <file1> .. <filen> ]
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
@@ -36,7 +36,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.13.2
+.ds Vw @(#) mailatt 1.14
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -237,6 +237,7 @@ f_urlencode_line() {
 	}'
 }
 
+# not all systems have mmencode(1); therefore, we'll encode it here
 f_base64encode_line() {
 	# Tested on:
 	#	HP-UX 10.20
@@ -368,9 +369,16 @@ f_extend_linelen() {
 }
 
 f_dissect() {
-	if [ `uname` = FreeBSD ]; then
-		# why did they have to deprecate od(1) :(
-		hexdump -e '"%06.6_ao " 16/1 "%3u " "\n"' ${1:+"$1"}
+	# some platforms don't have od(1)
+	if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
+		if [ "x$1" == x- ]; then
+			# Read from stdin. Not all versions of hexdump(1)
+			# support '-' as a shorthand for stdin.
+			arg=
+		else
+			arg="$1"
+		fi
+		hexdump -v -e '"%06.6_ao " 16/1 "%3u " "\n"' ${arg:+"$arg"}
 	else
 		od -t u1 -v ${1:+"$1"}
 	fi
@@ -388,16 +396,6 @@ f_select_encoder() {
 				f_select_encoder m
 			fi
 			;;
-#			# not present on all systems: not portable
-#		m*)	if f_which mmencode >/dev/null 2>&1; then
-#				encoding=base64
-#				encoder=mmencode
-#				hencoding=B
-#				hencoder=f_base64encode_line
-#			else
-#				f_select_encoder fm
-#			fi
-#			;;
 		m)	encoding=base64
 			encoder=f_base64encode_file
 			hencoding=B
@@ -558,27 +556,43 @@ f_attachment() { # type a/b
 }
 
 f_process_all_files() {
-	for fname in "$@"; do
+	for opt in "$@"; do
+		# process options, if any might follow
 		if [ -z "${end_opts#0}" ]; then
 			if [ "$charset_coming_up" ]; then
-				charset="$fname"
+				charset="$opt"
 				charset_coming_up=
 				continue
-			elif [ "x${fname#-C}" != "x$fname" ]; then
-				charset="${fname#-C}"
+			elif [ "x${opt#-C}" != "x$opt" ]; then
+				charset="${opt#-C}"
 				if [ -z "$charset" ]; then
 					charset_coming_up=1
 				fi
 				continue
-			elif [ "x${fname#-[muq]}" != "x$fname" ]; then
-				f_select_encoder ${fname#-}
+			elif [ "$mimetype_coming_up" ]; then
+				mimetype="$opt"
+				mimetype_coming_up=
 				continue
-			elif [ "x$fname" = x-- ]; then
+			elif [ "x${opt#-M}" != "x$opt" ]; then
+				mimetype="${opt#-M}"
+				if [ -z "$mimetype" ]; then
+					mimetype_coming_up=1
+				fi
+				continue
+			elif [ "x${opt#-[muq]}" != "x$opt" ]; then
+				f_select_encoder ${opt#-}
+				continue
+			elif [ "x$opt" = x-- ]; then
 				end_opts=1
 				continue
 			fi
 		fi
-		f_process_one_file
+
+		# process file
+		f_process_one_file "$opt" $mimetype
+		mimetype=
+
+		# switch content-disposition from inline to attachment if necessary
 		if [ "$inline_attachment" = inline -a "$mixed_alternative" != alternative ]; then
 			inline_attachment=attachment
 		fi
@@ -586,6 +600,19 @@ f_process_all_files() {
 }
 
 f_process_one_file() {
+	fname="$1"
+
+	# explicit mimetype requested?
+	mimetype="$2"
+	if [ "${mimetype#text/}" != "$mimetype" ]; then
+		f_attachment "$mimetype" a
+		return
+	elif [ "$mimetype" ]; then
+		f_attachment "$mimetype" b
+		return
+	fi
+
+	# guess mimetype by extension
 	case "$(f_lowercase "$fname")" in
 		# scripts/html/text
 		*.txt|*.sql|*.log)	f_attachment text/plain				a ;;
@@ -642,6 +669,7 @@ f_process_one_file() {
 		*.mid|*.midi|*.rmi)	f_attachment audio/midi				b ;;
 		*.mp3)			f_attachment audio/mpeg				b ;;
 		*.m3u)			f_attachment audio/x-mpegurl			b ;;
+		*.m3u8)			f_attachment application/x-mpegURL		b ;;
 		*.au|*.snd)		f_attachment audio/basic			b ;;
 		*.wav)			f_attachment audio/x-wav			b ;;
 		*.voc)			f_attachment audio/x-voc			b ;;
@@ -650,10 +678,15 @@ f_process_one_file() {
 		*.ra)			f_attachment audio/x-realaudio			b ;;
 		# video formats
 		*.mp[aeg2]|*.mpeg)	f_attachment video/mpeg				b ;;
+		*.mp4)			f_attachment video/mp4				b ;;
 		*.qt|*.mov)		f_attachment video/quicktime			b ;;
 		*.avi)			f_attachment video/x-msvideo			b ;;
 		*.fli)			f_attachment video/x-fli			b ;;
+		*.flv)			f_attachment video/x-flv			b ;;
+		*.ts)			f_attachment video/MP2T				b ;;
+		*.3gp)			f_attachment video/3gpp				b ;;
 		*.as[frx])		f_attachment video/x-ms-asf			b ;;
+		*.wmv)			f_attachment video/x-ms-wmv			b ;;
 		# document formats
 		*.do[ct]|*.wri|*.rtf)	f_attachment application/msword			b ;;
 		*.wp|*.wp[56])		f_attachment application/wordperfect		b ;;
@@ -698,7 +731,7 @@ f_process_one_file() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:H:IR:ab:c:df:himqr:s:uv" currentopt; do
+while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		8)	allow8bit=1
 			;;
@@ -711,6 +744,8 @@ while getopts "8C:H:IR:ab:c:df:himqr:s:uv" currentopt; do
 			fi
 			;;
 		I)	inline_attachment=inline
+			;;
+		M)	mimetype="$OPTARG"
 			;;
 		a)	inline_attachment=inline
 			mixed_alternative=alternative
@@ -773,6 +808,7 @@ S<<	C<[ -s >I<subject>C< ]>			>>
 S<<	C<[ -H >I<headerline>C< ]>		>>
 S<<	C<[ -8Iadimqu ]>			>>
 S<<	C<[ -C >I<charset>C< ]>			>>
+S<<	C<[ -M >I<mime-type>C< ]>		>>
 S<<	C<[ >I<file1 .. filen>C< ]>		>>
 
 C<mailatt { -h | -v }>
@@ -850,6 +886,13 @@ is used. It is provided only for backward-compatibility.
 
 Do not use. Use B<-i> instead.
 
+=item -M I<mime-type>
+
+Specifies the MIME type to be used for the following file. If not
+specified, the MIME type is inferred from the filename extension.
+
+The encoding is determined from the MIME type.
+
 =item -R I<addr1>[,I<addr2..>]
 
 Specify Reply-To: addresses for the e-mail. See B<-r> for allowed formats.
@@ -901,6 +944,9 @@ This option may be used multiple times, and in any position on the
 commandline.  It indicates that base64 encoding should be used for all
 subsequent binary attachments and header lines.  This is the default
 if unspecified.
+
+This option is called B<-m> as a reference to mmencode(1). However,
+B<mailatt> does not require any external mmencode(1) program.
 
 =item -q
 
@@ -1035,7 +1081,18 @@ Send a mail with mixed character sets:
 \&          -s 'Allo\*^' -C UTF-8 -i message.html -C windows-1253 m.txt
 .\}
 .Ve
-.PP \
+.PP
+
+Send a mail with specified MIME types:
+
+  mailatt -r amalia -i greeting.txt
+          -M application/x-rpm mailcap-2.1.31.noarch.rpm
+          -M audio/x-pn-realaudio recording.rpm
+
+Specify the MIME type of an attachment fed via stdin:
+
+  mailatt -r alexia -s 'Holiday pictures' -i -C ISO-Latin-15
+          -M text/html - skiing-1.jpg skiing-2.jpg < greeting.html
 
 =head1 ENVIRONMENT
 
@@ -1050,8 +1107,9 @@ to be printed on I<stdout> instead of actually being sent.
 
 =head1 BUGS and WARNINGS
 
-An HTML-file cannot be included using input redirection, as its type will
-be reported in the mail as I<text/plain>. Attach it by filename instead.
+If a file is included using input redirection, its MIME type will be inferred
+to be I<text/plain> unless a different type is specified on the command line
+using the B<-M> option.
 
 =head1 SEE ALSO
 

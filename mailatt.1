@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.13.2
+.ds Vw @(#) mailatt 1.14
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -154,6 +154,7 @@ mailatt \- send e\-mail with attachments
 \&\f(CW\*(C`[\ \-H\ \*(C'\fR\fIheaderline\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-8Iadimqu\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-C\ \*(C'\fR\fIcharset\fR\f(CW\*(C`\ ]\*(C'\fR
+\&\f(CW\*(C`[\ \-M\ \*(C'\fR\fImime-type\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \*(C'\fR\fIfile1\ ..\ filen\fR\f(CW\*(C`\ ]\*(C'\fR
 .PP
 \&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
@@ -211,6 +212,12 @@ Some e\-mail clients may not display \s-1MIME\s0 parts correctly when this optio
 is used. It is provided only for backward-compatibility.
 .Sp
 Do not use. Use \fB\-i\fR instead.
+.IP "\-M \fImime-type\fR" 4
+.IX Item "-M mime-type"
+Specifies the \s-1MIME\s0 type to be used for the following file. If not
+specified, the \s-1MIME\s0 type is inferred from the filename extension.
+.Sp
+The encoding is determined from the \s-1MIME\s0 type.
 .IP "\-R \fIaddr1\fR[,\fIaddr2..\fR]" 4
 .IX Item "-R addr1[,addr2..]"
 Specify Reply-To: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
@@ -254,6 +261,9 @@ This option may be used multiple times, and in any position on the
 commandline.  It indicates that base64 encoding should be used for all
 subsequent binary attachments and header lines.  This is the default
 if unspecified.
+.Sp
+This option is called \fB\-m\fR as a reference to \fImmencode\fR\|(1). However,
+\&\fBmailatt\fR does not require any external \fImmencode\fR\|(1) program.
 .IP "\-q" 4
 .IX Item "-q"
 This option may be used multiple times, and in any position on the
@@ -395,7 +405,22 @@ Send a mail with mixed character sets:
 \&          -s 'Allo\*^' -C UTF-8 -i message.html -C windows-1253 m.txt
 .\}
 .Ve
-.PP \
+.PP
+.PP
+Send a mail with specified \s-1MIME\s0 types:
+.PP
+.Vb 3
+\&  mailatt \-r amalia \-i greeting.txt
+\&          \-M application/x\-rpm mailcap\-2.1.31.noarch.rpm
+\&          \-M audio/x\-pn\-realaudio recording.rpm
+.Ve
+.PP
+Specify the \s-1MIME\s0 type of an attachment fed via stdin:
+.PP
+.Vb 2
+\&  mailatt \-r alexia \-s \*(AqHoliday pictures\*(Aq \-i \-C ISO\-Latin\-15
+\&          \-M text/html \- skiing\-1.jpg skiing\-2.jpg < greeting.html
+.Ve
 .SH "ENVIRONMENT"
 .IX Header "ENVIRONMENT"
 .IP "\s-1MAILATT_DEBUG\s0" 4
@@ -404,8 +429,9 @@ For debugging purposes only. If set and not \fB0\fR, causes the composed mail
 to be printed on \fIstdout\fR instead of actually being sent.
 .SH "BUGS and WARNINGS"
 .IX Header "BUGS and WARNINGS"
-An HTML-file cannot be included using input redirection, as its type will
-be reported in the mail as \fItext/plain\fR. Attach it by filename instead.
+If a file is included using input redirection, its \s-1MIME\s0 type will be inferred
+to be \fItext/plain\fR unless a different type is specified on the command line
+using the \fB\-M\fR option.
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
 \&\fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
