@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14.2
+.ds Vw @(#) mailatt 1.14.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -394,6 +394,14 @@ Add custom lines to the mail header:
 .Vb 2
 \&  mailatt \-r \*(AqBenedictus_XVI@vatican.va\*(Aq \-s \*(AqOldest translation\*(Aq
 \&          \-i \-H "X\-Year\-Finished: 1637" message.txt SV.pdf
+.Ve
+.PP
+Add a Sender: line to the mail header:
+.PP
+.Vb 3
+\&  mailatt \-r all@company.com \-s \*(AqImportant announcement\*(Aq \-i
+\&          \-H \*(AqSender: secretary@company.com\*(Aq \-f ceo@company.com
+\&          message.html
 .Ve
 .PP
 Send a mail with mixed character sets:

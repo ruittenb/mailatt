@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.14.2
+# Version:	1.14.3
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -37,7 +37,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14.2
+.ds Vw @(#) mailatt 1.14.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -1061,6 +1061,12 @@ Add custom lines to the mail header:
 
   mailatt -r 'Benedictus_XVI@vatican.va' -s 'Oldest translation'
           -i -H "X-Year-Finished: 1637" message.txt SV.pdf
+
+Add a Sender: line to the mail header:
+
+  mailatt -r all@company.com -s 'Important announcement' -i
+          -H 'Sender: secretary@company.com' -f ceo@company.com
+	  message.html
 
 Send a mail with mixed character sets:
 

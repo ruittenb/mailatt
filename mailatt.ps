@@ -1,6 +1,6 @@
 %!PS-Adobe-3.0
 %%Creator: groff version 1.19.2
-%%CreationDate: Fri Mar 29 17:44:53 2019
+%%CreationDate: Fri Mar 29 17:47:57 2019
 %%DocumentNeededResources: font Times-Roman
 %%+ font Times-Bold
 %%+ font Courier
@@ -462,65 +462,67 @@ sysadmin@domain.nl \255i \255 sendmail.pdf)120 304.8 Q(Hello Bernhard,)
 t \255r \010Benedictus_XVI@vatican.va\010 \255s \010Oldest translation\
 \010)120 568.8 Q
 (\255i \255H "X\255Year\255Finished: 1637" message.txt SV.pdf)168 580.8
-Q F0(Send a mail with mix)108 597.6 Q(ed character sets:)-.15 E F2
-(mailatt -C ISO-8859-15 -r 'Fran\347ois <francois@nimporte.ou>')120
-614.4 Q(-s 'All\364' -C UTF-8 -i message.html -C windows-1253 m.txt)168
-626.4 Q F0(Send a mail with speci\214ed)108 648 Q F3(MIME)2.5 E F0
-(types:)2.5 E F2(mailatt \255r amalia \255i greeting.txt)120 664.8 Q
-(\255M application/x\255rpm mailcap\2552.1.31.noarch.rpm)168 676.8 Q
-(\255M audio/x\255pn\255realaudio recording.rpm)168 688.8 Q F0
-(Specify the)108 705.6 Q F3(MIME)2.5 E F0
-(type of an attachment fed via stdin:)2.5 E 203.17(2019-03-29 3)282.67
-768 R 0 Cg EP
+Q F0(Add a Sender: line to the mail header:)108 597.6 Q F2(mailatt \255\
+r all@company.com \255s \010Important announcement\010 \255i)120 614.4 Q
+(\255H \010Sender: secretary@company.com\010 \255f ceo@company.com)168
+626.4 Q(message.html)168 638.4 Q F0(Send a mail with mix)108 655.2 Q
+(ed character sets:)-.15 E F2
+(mailatt -C ISO-8859-15 -r 'Fran\347ois <francois@nimporte.ou>')120 672
+Q(-s 'All\364' -C UTF-8 -i message.html -C windows-1253 m.txt)168 684 Q
+F0(Send a mail with speci\214ed)108 705.6 Q F3(MIME)2.5 E F0(types:)2.5
+E 203.17(2019-03-29 3)282.67 768 R 0 Cg EP
 %%Page: 4 4
 %%BeginPageSetup
 BP
 %%EndPageSetup
 /F0 10/Times-Roman@0 SF 386.62(mailatt\(1\) mailatt\(1\))72 48 R/F1 10
-/Courier@0 SF(mailatt \255r alexia \255s \010Holiday pictures\010 \255i\
- \255C ISO\255Latin\25515)120 84 Q
-(\255M text/html \255 skiing\2551.jpg skiing\2552.jpg < greeting.html)
-168 96 Q/F2 10.95/Times-Bold@0 SF(ENVIR)72 112.8 Q(ONMENT)-.329 E/F3 9
-/Times-Roman@0 SF(MAILA)108 124.8 Q(TT_DEB)-.999 E(UG)-.09 E F0 -.15(Fo)
-128 136.8 S 4.231(rd).15 G(eb)-4.231 E 1.731(ugging purposes only)-.2 F
-4.231(.I)-.65 G 4.231(fs)-4.231 G 1.731(et and not)-4.231 F/F4 10
-/Times-Bold@0 SF(0)4.231 E F0 4.231(,c)C 1.73
-(auses the composed mail to be printed on)-4.231 F/F5 10/Times-Italic@0
-SF(stdout)4.23 E F0(instead of actually being sent.)128 148.8 Q F2 -.11
-(BU)72 165.6 S(GS and W).11 E(ARNINGS)-1.314 E F0 .275
-(If a \214le is included using input redirection, its)108 177.6 R F3
+/Courier@0 SF(mailatt \255r amalia \255i greeting.txt)120 84 Q
+(\255M application/x\255rpm mailcap\2552.1.31.noarch.rpm)168 96 Q
+(\255M audio/x\255pn\255realaudio recording.rpm)168 108 Q F0
+(Specify the)108 124.8 Q/F2 9/Times-Roman@0 SF(MIME)2.5 E F0
+(type of an attachment fed via stdin:)2.5 E F1(mailatt \255r alexia \
+\255s \010Holiday pictures\010 \255i \255C ISO\255Latin\25515)120 141.6
+Q(\255M text/html \255 skiing\2551.jpg skiing\2552.jpg < greeting.html)
+168 153.6 Q/F3 10.95/Times-Bold@0 SF(ENVIR)72 170.4 Q(ONMENT)-.329 E F2
+(MAILA)108 182.4 Q(TT_DEB)-.999 E(UG)-.09 E F0 -.15(Fo)128 194.4 S 4.231
+(rd).15 G(eb)-4.231 E 1.731(ugging purposes only)-.2 F 4.231(.I)-.65 G
+4.231(fs)-4.231 G 1.731(et and not)-4.231 F/F4 10/Times-Bold@0 SF(0)
+4.231 E F0 4.231(,c)C 1.73(auses the composed mail to be printed on)
+-4.231 F/F5 10/Times-Italic@0 SF(stdout)4.23 E F0
+(instead of actually being sent.)128 206.4 Q F3 -.11(BU)72 223.2 S
+(GS and W).11 E(ARNINGS)-1.314 E F0 .275
+(If a \214le is included using input redirection, its)108 235.2 R F2
 (MIME)2.775 E F0 .275(type will be inferred to be)2.775 F F5(te)2.775 E
 (xt/plain)-.2 E F0 .275(unless a dif)2.775 F(ferent)-.25 E
-(type is speci\214ed on the command line using the)108 189.6 Q F4<ad4d>
-2.5 E F0(option.)2.5 E F2(SEE ALSO)72 206.4 Q F5(mail)108 218.4 Q F0
-(\(1\),)1.666 E F5(mailx)2.5 E F0(\(1\),)1.666 E F5(mmencode)2.5 E F0
-(\(1\),)1.666 E F5(sendmail)2.5 E F0(\(8\),)1.666 E F5(uuencode)2.5 E F0
-(\(1\).)1.666 E F3(RFC 822:)108 235.2 Q F0 -.15(Fo)14.738 G
-(rmat of Internet T).15 E -.15(ex)-.7 G 2.5(tM).15 G(essages)-2.5 E F3
-(RFC 1049:)108 252 Q F0(The Content-T)10.238 E
-(ype Header Field for Internet Messages)-.8 E F3(RFC 2045:)108 268.8 Q
-(MIME:)10.238 E F0 -.15(Fo)2.5 G(rmat of Internet Message Bodies).15 E
-F3(RFC 2046:)108 285.6 Q(MIME:)10.238 E F0(Media T)2.5 E(ypes)-.8 E F3
-(RFC 2047:)108 302.4 Q(MIME:)10.238 E F0
-(Message Header Extensions for Non-ASCII T)2.5 E -.15(ex)-.7 G(t).15 E
-F3(RFC 2183:)108 319.2 Q F0(The Content-Disposition Header Field)10.238
-E F3(RFC 2387:)108 336 Q F0(The multipart/related Content-T)10.238 E
-(ype)-.8 E F3(RFC 2392:)108 352.8 Q F0(Content-ID and Message-ID URLs)
-10.238 E F3(RFC 2822:)108 369.6 Q F0(Internet Message F)10.238 E(ormat)
--.15 E F2(VERSION)72 386.4 Q F0(This manual pertains to)108 398.4 Q F4
-(mailatt)2.5 E F0 -.15(ve)2.5 G(rsion 1.14.2.).15 E F2 -.548(AU)72 415.2
-S(THOR and COPYRIGHT).548 E F0(Cop)108 427.2 Q 3.585
-(yright \251 2011-2019, Ren\351 Uittenbog)-.1 F 3.584
-(aard \(ruittenb@users.sourcefor)-.05 F 3.584
-(ge.net\) This program is free)-.18 F(softw)108 439.2 Q 1.29
+(type is speci\214ed on the command line using the)108 247.2 Q F4<ad4d>
+2.5 E F0(option.)2.5 E F3(SEE ALSO)72 264 Q F5(mail)108 276 Q F0(\(1\),)
+1.666 E F5(mailx)2.5 E F0(\(1\),)1.666 E F5(mmencode)2.5 E F0(\(1\),)
+1.666 E F5(sendmail)2.5 E F0(\(8\),)1.666 E F5(uuencode)2.5 E F0(\(1\).)
+1.666 E F2(RFC 822:)108 292.8 Q F0 -.15(Fo)14.738 G(rmat of Internet T)
+.15 E -.15(ex)-.7 G 2.5(tM).15 G(essages)-2.5 E F2(RFC 1049:)108 309.6 Q
+F0(The Content-T)10.238 E(ype Header Field for Internet Messages)-.8 E
+F2(RFC 2045:)108 326.4 Q(MIME:)10.238 E F0 -.15(Fo)2.5 G
+(rmat of Internet Message Bodies).15 E F2(RFC 2046:)108 343.2 Q(MIME:)
+10.238 E F0(Media T)2.5 E(ypes)-.8 E F2(RFC 2047:)108 360 Q(MIME:)10.238
+E F0(Message Header Extensions for Non-ASCII T)2.5 E -.15(ex)-.7 G(t).15
+E F2(RFC 2183:)108 376.8 Q F0(The Content-Disposition Header Field)
+10.238 E F2(RFC 2387:)108 393.6 Q F0(The multipart/related Content-T)
+10.238 E(ype)-.8 E F2(RFC 2392:)108 410.4 Q F0
+(Content-ID and Message-ID URLs)10.238 E F2(RFC 2822:)108 427.2 Q F0
+(Internet Message F)10.238 E(ormat)-.15 E F3(VERSION)72 444 Q F0
+(This manual pertains to)108 456 Q F4(mailatt)2.5 E F0 -.15(ve)2.5 G
+(rsion 1.14.3.).15 E F3 -.548(AU)72 472.8 S(THOR and COPYRIGHT).548 E F0
+(Cop)108 484.8 Q 3.585(yright \251 2011-2019, Ren\351 Uittenbog)-.1 F
+3.584(aard \(ruittenb@users.sourcefor)-.05 F 3.584
+(ge.net\) This program is free)-.18 F(softw)108 496.8 Q 1.29
 (are; you can redistrib)-.1 F 1.29
-(ute it and/or modify it under the terms described by the)-.2 F F3(GNU)
-3.791 E F0 1.291(General Public)3.791 F(License v)108 451.2 Q(ersion 3.)
--.15 E F1(mailatt)108 468 Q F0 1.024(is distrib)3.524 F 1.024
+(ute it and/or modify it under the terms described by the)-.2 F F2(GNU)
+3.791 E F0 1.291(General Public)3.791 F(License v)108 508.8 Q(ersion 3.)
+-.15 E F1(mailatt)108 525.6 Q F0 1.024(is distrib)3.524 F 1.024
 (uted without an)-.2 F 3.524(yw)-.15 G(arranty)-3.624 E 3.524(,e)-.65 G
 -.15(ve)-3.774 G 3.524(nw).15 G 1.024(ithout the implied w)-3.524 F
 1.023(arranties of merchantability or)-.1 F
-(\214tness for a particular purpose.)108 480 Q 203.17(2019-03-29 4)
+(\214tness for a particular purpose.)108 537.6 Q 203.17(2019-03-29 4)
 282.67 768 R 0 Cg EP
 %%Trailer
 end
