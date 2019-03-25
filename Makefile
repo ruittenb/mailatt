@@ -66,10 +66,10 @@ test: $(PROG) ## Run simple test
 		echo 'Test  7 succesful (header)'
 	@./$(PROG) -d -C $(CHARSET) -q -r $(TO) |                       \
 		grep '^To: =?ISO-8859-15?Q?Recipient?= ' >$(NULL) &&    \
-		echo 'Test  8 succesful (base64)'
+		echo 'Test  8 succesful (content-transfer-encoding)'
 	@./$(PROG) -d -C $(CHARSET) -m -r $(TO) |                       \
 		grep '^To: =?ISO-8859-15?B?UmVjaXBpZW50?= ' >$(NULL) && \
-		echo 'Test  9 succesful (quoted-printable)'
+		echo 'Test  9 succesful (content-transfer-encoding)'
 	@echo | ./$(PROG) -d -r $(TO) -i - |                            \
 		grep '^Content-Disposition: inline' >$(NULL) &&         \
 		echo 'Test 10 succesful (content-disposition)'
