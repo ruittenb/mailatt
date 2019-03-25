@@ -2,7 +2,8 @@
 
 Mailatt is a portable Unix/Linux shell script for sending mail with MIME attachments.
 
-The Content-Type and Content-Transfer-Encoding are guessed, but can be overruled with command line options. There is support for HTML mail and non-ASCII character sets.
+It supports command-line specifiable Content-Type and Content-Transfer-Encoding with
+sensible defaults.  There is support for HTML mail and non-ASCII character sets.
 
 ## Building:
 
