@@ -129,13 +129,13 @@
 .\" ========================================================================
 .\"
 .IX Title "mailatt 1"
-.TH mailatt 1 "2019-03-23" " " " "
+.TH mailatt 1 "2019-03-29" " " " "
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
 .nh
-.ds Yr 2019
-.ds Vw @(#) mailatt 1.13.1
+.ds Yr 2011-2019
+.ds Vw @(#) mailatt 1.13.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -182,8 +182,6 @@ is used to send a collection of files which are not necessarily related.
 \&\fImultipart/alternative\fR is used to provide alternative representations
 of the same message (\fIe.g.\fR plain text and \s-1HTML\s0), in which case the mail
 client can select one to present.  See also the \fB\-a\fR option below.
-.PP \" display the 'pertains to'-macro
-.Vp \*(Vw \
 .SH "OPTIONS"
 .IX Header "OPTIONS"
 .IP "\-8" 4
@@ -292,6 +290,9 @@ formats:
 The first two forms will be expanded (using the system \fIpasswd\fR file or (if
 configured) the \s-1NIS \s0\fIpasswd\fR map) to the form "\fIname\fR\ <\fIuser\fR>\*(L", which
 the mailer system may further expand to \*(R"\fIname\fR\ <\fIuser\fR@\fIdomain\fR>".
+.Sp
+The \fB\-r\fR option is strictly speaking not mandatory for \fBmailatt\fR, but it
+is for programs like \fIsendmail\fR\|(1).
 .RE
 .IP "\-s \fIsubject\fR" 4
 .IX Item "-s subject"
@@ -405,10 +406,6 @@ to be printed on \fIstdout\fR instead of actually being sent.
 .IX Header "BUGS and WARNINGS"
 An HTML-file cannot be included using input redirection, as its type will
 be reported in the mail as \fItext/plain\fR. Attach it by filename instead.
-.SH "VERSION"
-.IX Header "VERSION"
-.PP \" display the 'pertains to'-macro
-.Vp \*(Vw
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
 \&\fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
@@ -439,9 +436,18 @@ Content-ID and Message-ID URLs
 .IP "\s-1RFC 2822:\s0" 10
 .IX Item "RFC 2822:"
 Internet Message Format
-.SH "AUTHOR"
-.IX Header "AUTHOR"
+.SH "VERSION"
+.IX Header "VERSION"
+.PP \" display the 'pertains to'-macro
+.Vp \*(Vw
+.SH "AUTHOR and COPYRIGHT"
+.IX Header "AUTHOR and COPYRIGHT"
 .\" the \(co macro only exists in groff
 .ie \n(.g Copyright \(co \*(Yr, Ren\('e
 .el       Copyright (c) \*(Yr, Rene\*'
 Uittenbogaard (ruittenb@users.sourceforge.net)
+This program is free software; you can redistribute it and/or modify it
+under the terms described by the \s-1GNU\s0 General Public License version 3.
+.PP
+\&\f(CW\*(C`mailatt\*(C'\fR is distributed without any warranty, even without the
+implied warranties of merchantability or fitness for a particular purpose.

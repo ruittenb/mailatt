@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.13.1
+# Version:	1.13.2
 # Created:	2011-02-11
 # Date:		2019-03-23
 # Author:	Rene Uittenbogaard
@@ -35,8 +35,8 @@ version='
 =pod
 
 =for roff
-.ds Yr 2019
-.ds Vw @(#) mailatt 1.13.1
+.ds Yr 2011-2019
+.ds Vw @(#) mailatt 1.13.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -238,13 +238,14 @@ f_urlencode_line() {
 }
 
 f_base64encode_line() {
-	# tested on:
+	# Tested on:
 	#	HP-UX 10.20
 	#	HP-UX 11.11
 	#	AIX 4.2
 	#	SunOS 5.8
 	#	SuSE UnitedLinux 1.0
 	#	Debian 3.0
+	#	Darwin 17.7.0
 	$awk -v inheader="$1" '
 		# encode file to base64
 		# remotely based on a script by Peter van Eerten (c) March 6 2003
@@ -307,13 +308,14 @@ f_base64encode_line() {
 }
 
 f_qpencode_line() {
-	# This quoted-printable encoder has been tested on:
+	# Tested on:
 	#	HP-UX 10.20
 	#	HP-UX 11.11
 	#	AIX 4.2
 	#	SunOS 5.8
 	#	SuSE UnitedLinux 1.0
 	#	Debian 3.0
+	#	Darwin 17.7.0
 	$awk -v inheader="$1" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
@@ -813,10 +815,6 @@ I<multipart/alternative> is used to provide alternative representations
 of the same message (I<e.g.> plain text and HTML), in which case the mail
 client can select one to present.  See also the B<-a> option below.
 
-=for roff
-.PP \" display the 'pertains to'-macro
-.Vp \*(Vw \
-
 =head1 OPTIONS
 
 =over 4
@@ -941,6 +939,9 @@ The first two forms will be expanded (using the system F<passwd> file or (if
 configured) the NIS F<passwd> map) to the form "I<name>S< ><I<user>>", which
 the mailer system may further expand to "I<name>S< ><I<user>@I<domain>>".
 
+The B<-r> option is strictly speaking not mandatory for B<mailatt>, but it
+is for programs like sendmail(1).
+
 =item -s I<subject>
 
 Specify subject for the e-mail.
@@ -1052,12 +1053,6 @@ to be printed on I<stdout> instead of actually being sent.
 An HTML-file cannot be included using input redirection, as its type will
 be reported in the mail as I<text/plain>. Attach it by filename instead.
 
-=head1 VERSION
-
-=for roff
-.PP \" display the 'pertains to'-macro
-.Vp \*(Vw
-
 =head1 SEE ALSO
 
 mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
@@ -1104,13 +1099,25 @@ Internet Message Format
 
 =back
 
-=head1 AUTHOR
+=head1 VERSION
+
+=for roff
+.PP \" display the 'pertains to'-macro
+.Vp \*(Vw
+
+=head1 AUTHOR and COPYRIGHT
 
 =for roff
 .\" the \(co macro only exists in groff
 .ie \n(.g Copyright \(co \*(Yr, Ren\('e
 .el       Copyright (c) \*(Yr, Rene\*'
 Uittenbogaard (ruittenb@users.sourceforge.net)
+
+This program is free software; you can redistribute it and/or modify it
+under the terms described by the GNU General Public License version 3.
+
+C<mailatt> is distributed without any warranty, even without the
+implied warranties of merchantability or fitness for a particular purpose.
 
 =cut
 
