@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14.3
+.ds Vw @(#) mailatt 1.14.4
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -172,12 +172,8 @@ Files of type \fItext/*\fR in a character set other than US-ASCII will be
 attached using quoted-printable encoding.
 .IP "\-" 3
 Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
-be attached base64\-encoded by default (but see the \fB\-q\fR and \fB\-u\fR options
-below).
-.IP "\-" 3
-If explicitly requested, yEncoded files (\fI*.ync\fR) will be attached as-is
-(8bit\-encoded).  Note that not all Mail Transfer Agents can handle this
-type of transfer cleanly. See the \fB\-8\fR option below.
+be attached base64\-encoded by default (but see the \fB\-m\fR and \fB\-q\fR
+options below).
 .PP
 \&\fBmailatt\fR can send messages in two possible formats.  \fImultipart/mixed\fR
 is used to send a collection of files which are not necessarily related.
@@ -188,11 +184,14 @@ client can select one to present.  See also the \fB\-a\fR option below.
 .IX Header "OPTIONS"
 .IP "\-8" 4
 .IX Item "-8"
-Include certain \s-1MIME\s0 types (currently only yEncoded files) using 8bit
-encoding.  The default is to include all binary files using base64 encoding.
-The reason for allowing this is that yEncoded files are supposed to
-use less bandwidth. This method is, however, not supported by all Mail
-Transfer Agents.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that \fB8bit\fR should be used as Content-Transfer-Encoding
+for all subsequent binary attachments (header lines will be base64\-encoded).
+.Sp
+\&\fBWarning\fR: not all e\-mail clients support this.  The use of this option
+is therefore discouraged; use \fB\-m\fR instead.
+.Sp
+See also \fB\-m\fR and \fB\-q\fR.
 .IP "\-C \fIcharset\fR" 4
 .IX Item "-C charset"
 This option may be used multiple times, and in any position on the
@@ -209,10 +208,9 @@ This option is nearly identical to \fB\-i\fR, but uses the \*(L"old\*(R" behavio
 which is to include a filename for all \s-1MIME\s0 parts, even those that are
 attached using \f(CW\*(C`Content\-Disposition: inline\*(C'\fR.
 .Sp
-\&\fBWarning:\fR not all e\-mail clients support this.  This option is
-provided only for backward-compatibility.
-.Sp
-The use of this option is discouraged; use \fB\-i\fR instead.
+\&\fBWarning\fR: not all e\-mail clients support this.  This option is
+provided only for backward-compatibility.  The use of this option
+is therefore discouraged; use \fB\-i\fR instead.
 .IP "\-M \fImime-type\fR" 4
 .IX Item "-M mime-type"
 Specifies the \s-1MIME\s0 type to be used for the following file. If not
@@ -256,20 +254,25 @@ with \f(CW\*(C`Content\-Disposition: attachment\*(C'\fR and a specified filename
 The option \fB\-a\fR takes precedence over \fB\-i\fR.
 .IP "\-m" 4
 .IX Item "-m"
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that base64 encoding should be used for all
-subsequent binary attachments and header lines.  This is the default
+This option may be used multiple times, and in any position on the commandline.
+It indicates that \fBbase64\fR should be used as Content-Transfer-Encoding
+for all subsequent binary attachments and header lines.  This is the default
 if unspecified.
 .Sp
 This option is called \fB\-m\fR as a reference to \fImmencode\fR\|(1). However,
 \&\fBmailatt\fR does not require any external \fImmencode\fR\|(1) program.
+.Sp
+See also \fB\-q\fR.
 .IP "\-q" 4
 .IX Item "-q"
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that quoted-printable encoding should be used
-for all binary attachments and header lines.  Although quoted-printable
-is normally only used for \s-1ASCII\s0 attachments, \fBmailatt\fR's implementation
-will make binaries come through intact.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that \fBquoted-printable\fR should be used as Content-Transfer-Encoding
+for all subsequent binary attachments and header lines.
+.Sp
+Although quoted-printable is normally only used for \s-1ASCII\s0 attachments,
+\&\fBmailatt\fR also supports this encoding for binaries.
+.Sp
+See also \fB\-m\fR.
 .IP "\-r \fIaddr1\fR[,\fIaddr2..\fR]" 4
 .IX Item "-r addr1[,addr2..]"
 Specify recipients (To: addresses) for the e\-mail.
@@ -309,12 +312,13 @@ Specify subject for the e\-mail.
 .IP "\-u" 4
 .IX Item "-u"
 This option may be used multiple times, and in any position on the commandline.
-It indicates that uuencode should be used as Content-Transfer-Encoding
-for all binary attachments.
+It indicates that \fBuuencode\fR should be used as Content-Transfer-Encoding
+for all subsequent binary attachments (header lines will be base64\-encoded).
 .Sp
-\&\fBWarning:\fR not all e\-mail clients support this.
+\&\fBWarning\fR: not all e\-mail clients support this.  The use of this option
+is therefore discouraged; use \fB\-m\fR instead.
 .Sp
-The use of this option is discouraged; use \fB\-m\fR instead.
+See also \fB\-m\fR and \fB\-q\fR.
 .IP "\-v" 4
 .IX Item "-v"
 Display version information and exit.
