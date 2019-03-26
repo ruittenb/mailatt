@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.15.1
+# Version:	1.15.2
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -34,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.15.1
+.ds Vw @(#) mailatt 1.15.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -48,7 +48,7 @@ This manual pertains to \fBmailatt\fP version \\$3.
 f_initialize() {
 	f_setpath
 	f_findawk
-	f_select_encoder m
+	f_select_encoder init
 	f_find_cid_data
 	attno=0
 	charset=us-ascii
@@ -374,8 +374,10 @@ f_dissect() {
 f_select_encoder() {
 	case "$1" in
 		u)	if f_has uuencode; then
-				encoding=uuencode
-				encoder=uuencode
+				bin_encoding=uuencode
+				bin_encoder=uuencode
+				asc_encoding="$bin_encoding"
+				asc_encoder="$bin_encoder"
 				header_encoding=B
 				header_encoder=f_base64encode_line
 			else
@@ -383,23 +385,38 @@ f_select_encoder() {
 				f_select_encoder m
 			fi
 			;;
-		m)	encoding=base64
-			encoder=f_base64encode_file
+		m)	bin_encoding=base64
+			bin_encoder=f_base64encode_file
+			asc_encoding="$bin_encoding"
+			asc_encoder="$bin_encoder"
 			header_encoding=B
 			header_encoder=f_base64encode_line
 			;;
-		q)	encoding=quoted-printable
-			encoder=f_qpencode_file
+		q)	bin_encoding=quoted-printable
+			bin_encoder=f_qpencode_file
+			asc_encoding="$bin_encoding"
+			asc_encoder="$bin_encoder"
 			header_encoding=Q
 			header_encoder=f_qpencode_line
 			;;
-		8)	encoding=8bit
-			encoder=cat
+		8)	bin_encoding=8bit
+			bin_encoder=cat
+			asc_encoding="$bin_encoding"
+			asc_encoder="$bin_encoder"
 			header_encoding=B
 			header_encoder=f_base64encode_line
 			;;
-		*)	encoding=binary
-			encoder=cat
+		init)	bin_encoding=base64
+			bin_encoder=f_base64encode_file
+			asc_encoding=quoted-printable
+			asc_encoder=f_qpencode_file
+			header_encoding=B
+			header_encoder=f_base64encode_line
+			;;
+		*)	bin_encoding=binary
+			bin_encoder=cat
+			asc_encoding="$bin_encoding"
+			asc_encoder="$bin_encoder"
 			header_encoding=B
 			header_encoder=f_base64encode_line
 			;;
@@ -459,12 +476,12 @@ f_composemail() {
 }
 
 f_binattach() {
-	f_echo "Content-Transfer-Encoding: $encoding"
+	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	f_echo
-	if [ "$encoding" = uuencode ]; then
-		$encoder "$1" "$2"
+	if [ "$bin_encoding" = uuencode ]; then
+		$bin_encoder "$1" "$2"
 	else
-		$encoder "$1"
+		$bin_encoder "$1"
 	fi
 }
 
@@ -482,10 +499,13 @@ f_ascattach() {
 		# RFC 5322: Lines of characters in the body MUST be limited to 998 characters.
 		fold -w992 "$1"
 	else
-		f_binattach "$@"
-#		f_echo "Content-Transfer-Encoding: quoted-printable"
-#		f_echo
-#		f_qpencode_file "$1"
+		f_echo "Content-Transfer-Encoding: $asc_encoding"
+		f_echo
+		if [ "$asc_encoding" = uuencode ]; then
+			$asc_encoder "$1" "$2"
+		else
+			$asc_encoder "$1"
+		fi
 	fi
 }
 
@@ -817,7 +837,8 @@ set has been specified on the commandline.  See the B<-C> option below.
 =item -
 
 Files of type I<text/*> in a character set other than US-ASCII will be
-attached using quoted-printable encoding.
+attached using quoted-printable encoding by default (but see the B<-m> and B<-q>
+options below).
 
 =item -
 
@@ -827,7 +848,7 @@ Files of type I<message/*> or I<multipart/*> will always be attached using
 =item -
 
 Binary files (I<i.e.> files having MIME types other than I<text/*>) will
-be attached base64-encoded by default (but see the B<-m> and B<-q>
+be attached using base64 encoding by default (but see the B<-m> and B<-q>
 options below).
 
 =back
@@ -846,7 +867,7 @@ client can select one to present.  See also the B<-a> option below.
 
 This option may be used multiple times, and in any position on the commandline.
 It indicates that B<8bit> should be used as Content-Transfer-Encoding
-for all subsequent binary attachments (header lines will be base64-encoded).
+for all subsequent attachments (header lines will be base64-encoded).
 
 B<Warning>: not all e-mail clients support this.  The use of this option
 is therefore discouraged; use B<-m> instead.
@@ -929,7 +950,7 @@ The option B<-a> takes precedence over B<-i>.
 
 This option may be used multiple times, and in any position on the commandline.
 It indicates that B<base64> should be used as Content-Transfer-Encoding
-for all subsequent binary attachments and header lines.  This is the default
+for all subsequent attachments and header lines.  This is the default
 if unspecified.
 
 This option is called B<-m> as a reference to mmencode(1). However,
@@ -941,7 +962,7 @@ See also B<-q>.
 
 This option may be used multiple times, and in any position on the commandline.
 It indicates that B<quoted-printable> should be used as Content-Transfer-Encoding
-for all subsequent binary attachments and header lines.
+for all subsequent attachments and header lines.
 
 Although quoted-printable is normally only used for ASCII attachments,
 B<mailatt> also supports this encoding for binaries.
@@ -988,7 +1009,7 @@ Specify subject for the e-mail.
 
 This option may be used multiple times, and in any position on the commandline.
 It indicates that B<uuencode> should be used as Content-Transfer-Encoding
-for all subsequent binary attachments (header lines will be base64-encoded).
+for all subsequent attachments (header lines will be base64-encoded).
 
 B<Warning>: not all e-mail clients support this.  The use of this option
 is therefore discouraged; use B<-m> instead.
