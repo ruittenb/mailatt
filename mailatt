@@ -1,26 +1,25 @@
+#!/usr/local/bin/bash
 #!/bin/ksh
 #
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.16
+# Version:	1.16.1
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
 #			[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]
-#			[ -H <headerline> ] [ -8Iadimqu ]
+#			[ -H <headerline> ] [ -d ] [ -Iai ] [ -8mqu ]
 #			[ -C <charset> ] [ -M mimetype ] [ <file1> .. <filen> ]
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
 #		bug?: convert to crlf for qp? f_onlcr?
 #		feat: implement multipart/related using content-id?
-#		feat: mailatt_args in header
 #		feat: Content-MD5 header?
-#		feat: move builtin MIME list to external file?
-#		feat: make -m, -u also for textfiles?
+#		feat: internal uuencoder
 #
 
 # The main program code starts at the label '# main'
@@ -34,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.16
+.ds Vw @(#) mailatt 1.16.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -50,6 +49,7 @@ f_initialize() {
 	f_findawk
 	f_select_encoder init
 	f_find_cid_data
+	source mime-identify ''
 	attno=0
 	charset=us-ascii
 	mixed_or_alternative=mixed
@@ -131,6 +131,17 @@ f_find_cid_data() {
 	cidtime="$(date +"%Y%m%d%H%M%S")"
 	cidrandom="`f_boundbits`"
 	cidhost="$(hostname)" 2>/dev/null
+}
+
+f_fold() {
+	fname="$#"
+	# RFC 5322: Lines of characters in the body MUST be limited to 998 characters.
+	if [ "x$1" == x- ]; then
+		# Darwin doesn't support '-' as inputfile for stdin
+		fold -w992
+	else
+		fold -w992 "$1"
+	fi
 }
 
 f_onlcr() {
@@ -438,9 +449,9 @@ f_boundbits() {
 }
 
 f_startmail() {
-	[ "$addresses"   ] && f_echo "$addresses"
-	[ "$subject"     ] && f_echo "$subject"
-	[ "$headerlines" ] && f_echo "$headerlines"
+	test "$addresses"   && f_echo "$addresses"
+	test "$subject"     && f_echo "$subject"
+	test "$headerlines" && f_echo "$headerlines"
 	boundary="Mailatt=Part:$RANDOM.$(f_boundbits)+$(f_boundbits)/"
 	cat <<-_MIME_header_preamble_
 		MIME-Version: 1.0
@@ -496,8 +507,7 @@ f_ascattach() {
 	then
 		f_echo "Content-Transfer-Encoding: 7bit"
 		f_echo
-		# RFC 5322: Lines of characters in the body MUST be limited to 998 characters.
-		fold -w992 "$1"
+		f_fold "$1"
 	else
 		f_echo "Content-Transfer-Encoding: $asc_encoding"
 		f_echo
@@ -532,9 +542,9 @@ f_attachit() {
 	esac
 }
 
-f_attachment() { # type a/b
-	contenttype="$1"
-	ascbin="$2"
+f_attachment() { # a/b mimetype
+	ascbin="$1"
+	contenttype="$2"
 	if [ "$contenttype" = default ]; then
 		if [ "$inline_or_attachment" = inline ]; then
 			contenttype=text/plain
@@ -543,7 +553,7 @@ f_attachment() { # type a/b
 			contenttype=application/octet-stream
 		fi
 	fi
-	if [ "X$fname" = X- ]; then
+	if [ "x$fname" = x- ]; then
 		f_termmess
 		neatname=stdin
 	elif [ ! -r "$fname" ]; then
@@ -613,125 +623,17 @@ f_process_one_file() {
 	# explicit mimetype requested?
 	mimetype="$2"
 	if [ "${mimetype#text/}" != "$mimetype" ]; then
-		f_attachment "$mimetype" a
+		f_attachment a "$mimetype"
 		return
 	elif [ "$mimetype" ]; then
-		f_attachment "$mimetype" b
+		f_attachment b "$mimetype"
 		return
 	fi
-
-	# guess mimetype by extension
-	case "$(f_lowercase "$fname")" in
-		# scripts/html/text
-		*.txt|*.sql|*.log)	f_attachment text/plain				a ;;
-		*.bash|*.tcsh|*.awk)	f_attachment text/plain				a ;;
-		*.sh|*.[kcz]sh)		f_attachment text/plain				a ;;
-		*.[ch]|*.c++|*.cpp)	f_attachment text/plain				a ;;
-		*.cc|*.p[mly])		f_attachment text/plain				a ;;
-		*.java|*.[pb]as)	f_attachment text/plain				a ;;
-		*.f|*.f77|*.f90|*.for)	f_attachment text/plain				a ;;
-		*.xml)			f_attachment text/xml				a ;;
-		*.[sh]tm|*.html)	f_attachment text/html				a ;;
-		*.[ps]html)		f_attachment text/html				a ;;
-		*.sgm|*.sgml)		f_attachment text/sgml				a ;;
-		*.css)			f_attachment text/css				a ;;
-		*.rtx)			f_attachment text/richtext			a ;;
-		# image formats
-		*.jp[eg]|*.jpeg|*.jfif)	f_attachment image/jpeg				b ;;
-		*.gif)			f_attachment image/gif				b ;;
-		*.tif|*.tiff)		f_attachment image/tiff				b ;;
-		*.png)			f_attachment image/png				b ;;
-		*.bmp)			f_attachment image/x-bitmap			b ;;
-		*.xbm)			f_attachment image/x-xbitmap			b ;;
-		*.xwd)			f_attachment image/x-xwd			b ;;
-		*.xpm)			f_attachment image/x-xpixmap			b ;;
-		*.xwd)			f_attachment image/x-xwindowdump		b ;;
-		*.pnm)			f_attachment image/x-portable-anymap		b ;;
-		*.ppm)			f_attachment image/x-portable-pixmap		b ;;
-		*.pbm)			f_attachment image/x-portable-bitmap		b ;;
-		*.pgm)			f_attachment image/x-portable-graymap		b ;;
-		*.pct|*.pic|*.pict)	f_attachment image/pict				b ;;
-		*.ico)			f_attachment image/x-icon			b ;;
-		# archive formats
-		*.arj|*.a[0-9][0-9])	f_attachment application/arj			b ;;
-		*.rar|*.r[0-9][0-9])	f_attachment application/x-rar-compressed	b ;;
-		*.cab)			f_attachment application/x-cab-compressed	b ;;
-		*.7z)			f_attachment application/x-7z-compressed	b ;;
-		*.arc)			f_attachment application/x-arc			b ;;
-		*.lha)			f_attachment application/x-lha			b ;;
-		*.lzh)			f_attachment application/x-lzh			b ;;
-		*.zip)			f_attachment application/zip			b ;;
-		*.z|*.taz)		f_attachment application/x-compress		b ;;
-		*.gz|*.tgz)		f_attachment application/x-gzip			b ;;
-		*.bz2)			f_attachment application/x-bzip2		b ;;
-		*.cpio)			f_attachment application/x-cpio			b ;;
-		*.rpm)			f_attachment application/x-rpm			b ;;
-		*.tar)			f_attachment application/x-tar			b ;;
-		*.deb|*.ar)		f_attachment application/x-ar			b ;;
-		*.hqx)			f_attachment application/mac-binhex40		b ;;
-		*.sit)			f_attachment application/x-stuffit		b ;;
-		*.ync|*.yenc)		f_attachment application/x-yenc-encoded		b ;;
-		*.shar)			f_attachment application/x-shar			a ;;
-		*.uu|*.uue)		f_attachment text/x-uuencode			a ;;
-		# audio formats
-		*.mid|*.midi|*.rmi)	f_attachment audio/midi				b ;;
-		*.mp3)			f_attachment audio/mpeg				b ;;
-		*.m3u)			f_attachment audio/x-mpegurl			b ;;
-		*.m3u8)			f_attachment application/x-mpegURL		b ;;
-		*.au|*.snd)		f_attachment audio/basic			b ;;
-		*.wav)			f_attachment audio/x-wav			b ;;
-		*.voc)			f_attachment audio/x-voc			b ;;
-		*.aif|*.aif[fc])	f_attachment audio/x-aiff			b ;;
-		*.ram|*.rm)		f_attachment audio/x-pn-realaudio		b ;;
-		*.ra)			f_attachment audio/x-realaudio			b ;;
-		# video formats
-		*.mp[aeg2]|*.mpeg)	f_attachment video/mpeg				b ;;
-		*.mp4)			f_attachment video/mp4				b ;;
-		*.qt|*.mov)		f_attachment video/quicktime			b ;;
-		*.avi)			f_attachment video/x-msvideo			b ;;
-		*.fli)			f_attachment video/x-fli			b ;;
-		*.flv)			f_attachment video/x-flv			b ;;
-		*.ts)			f_attachment video/MP2T				b ;;
-		*.3gp)			f_attachment video/3gpp				b ;;
-		*.as[frx])		f_attachment video/x-ms-asf			b ;;
-		*.wmv)			f_attachment video/x-ms-wmv			b ;;
-		# document formats
-		*.do[ct]|*.wri|*.rtf)	f_attachment application/msword			b ;;
-		*.wp|*.wp[56])		f_attachment application/wordperfect		b ;;
-		*.pot|*.pp[st])		f_attachment application/vnd.ms-powerpoint	b ;;
-		*.xl[acdklmstvw])	f_attachment application/vnd.ms-excel		b ;;
-		*.wcm|*.wdb|*.w[kp]s)	f_attachment application/vnd.ms-works		b ;;
-		*.mpp)			f_attachment application/vnd.ms-project		b ;;
-		*.mdb)			f_attachment application/x-msaccess		b ;;
-		*.hlp)			f_attachment application/x-winhelp		b ;;
-		*.swf)			f_attachment application/x-shockwave-flash	b ;;
-		*.pdf)			f_attachment application/pdf			b ;;
-		*.ai|*.ps|*.eps)	f_attachment application/postscript		b ;;
-		*.dvi)			f_attachment application/x-dvi			b ;;
-		*.[1-8]|*.1m)		f_attachment application/x-troff		a ;;
-		*.3pm|*.m[mse])		f_attachment application/x-troff		a ;;
-		*.roff|*.man|*.t|*.tr)	f_attachment application/x-troff		a ;;
-		*.tex)			f_attachment application/x-tex			a ;;
-		*.texi|*.texinfo)	f_attachment application/x-texinfo		a ;;
-		*.js)			f_attachment application/x-javascript		a ;;
-		*.latex)		f_attachment application/x-latex		a ;;
-		*.pdb)			f_attachment chemical/x-pdb			a ;;
-		*.pov)			f_attachment model/x-pov			a ;;
-		# mail
-		*.p10)			f_attachment application/pkcs10			b ;;
-		*.p12|*.pfx)		f_attachment application/pkcs12			b ;;
-		*.p7b|*.spc)		f_attachment application/pkcs7-certificates	b ;;
-		*.p7[cm])		f_attachment application/pkcs7-mime		b ;;
-		*.p7r)			f_attachment application/pkcs7-certreqresp	b ;;
-		*.p7s)			f_attachment application/pkcs7-signature	b ;;
-		*.[cd]er|*.crt) 	f_attachment application/x-x509-ca-cert		a ;;
-		*.mht|*.mhtm|*.mhtml)	f_attachment message/rfc822			a ;;
-		*.nws|*.news|*.eml)	f_attachment message/rfc822			a ;;
-		*.vcf)			f_attachment text/x-vcard			a ;;
-		# default
-		-)			f_attachment text/plain				a ;;
-		*)			f_attachment default				b ;;
-	esac
+	if [ "x$fname" = x- ]; then
+		f_attachment a text/plain
+	else
+		f_attachment $(f_mime_identify "$fname")
+	fi
 }
 
 ############################################################################
@@ -801,7 +703,7 @@ exit $?
 
 =head1 NAME
 
-mailatt - send e-mail with attachments
+B<mailatt> - send e-mail with attachments
 
 =head1 SYNOPSIS
 
@@ -819,6 +721,9 @@ S<<	C<[ -M >I<mime-type>C< ]>		>>
 S<<	C<[ >I<file1 .. filen>C< ]>		>>
 
 C<mailatt { -h | -v }>
+
+Please note that the order of the commandline options is significant.
+See especially B<-8CMmqu>.
 
 =head1 DESCRIPTION
 
@@ -1135,9 +1040,15 @@ If a file is included using input redirection, its MIME type will be inferred
 to be I<text/plain> unless a different type is specified on the command line
 using the B<-M> option.
 
+RFC 5322 requires the message body to be sent with network style (CR/LF) line
+endings.  This means that ASCII files with Un*x style (LF) line endings need
+to be attached using quoted-printable encoding if you want the line endings to
+be preserved.  For the time being, this means that you will have to specify a
+non-US-ASCII characterset.
+
 =head1 SEE ALSO
 
-mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
+base64(1), mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
 
 =over 10
 
@@ -1177,9 +1088,18 @@ Content-ID and Message-ID URLs
 
 Internet Message Format
 
+=item RFC 4648:
+
+The Base16, Base32, and Base64 Data Encodings
+
 =item RFC 5322:
 
 Internet Message Format
+
+=for author only: RFC 1521: MIME Part One: Mechanisms for Specifying and Describing
+the Format of Internet Message Bodies
+
+=for author only: RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
 
 =for author only: RFC 2646: The text/plain Format parameter
 

@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.16
+.ds Vw @(#) mailatt 1.16.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -158,6 +158,9 @@ mailatt \- send e\-mail with attachments
 \&\f(CW\*(C`[\ \*(C'\fR\fIfile1\ ..\ filen\fR\f(CW\*(C`\ ]\*(C'\fR
 .PP
 \&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
+.PP
+Please note that the order of the commandline options is significant.
+See especially \fB\-8CMmqu\fR.
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
 \&\fBmailatt\fR is used to send multipart \s-1MIME\s0 e\-mail with file attachments
@@ -451,9 +454,15 @@ to be printed on \fIstdout\fR instead of actually being sent.
 If a file is included using input redirection, its \s-1MIME\s0 type will be inferred
 to be \fItext/plain\fR unless a different type is specified on the command line
 using the \fB\-M\fR option.
+.PP
+\&\s-1RFC 5322\s0 requires the message body to be sent with network style (\s-1CR/LF\s0) line
+endings.  This means that \s-1ASCII\s0 files with Un*x style (\s-1LF\s0) line endings need
+to be attached using quoted-printable encoding if you want the line endings to
+be preserved.  For the time being, this means that you will have to specify a
+non-US-ASCII characterset.
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
-\&\fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
+\&\fIbase64\fR\|(1), \fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
 .IP "\s-1RFC 822:\s0" 10
 .IX Item "RFC 822:"
 Format of Internet Text Messages
@@ -481,6 +490,9 @@ Content-ID and Message-ID URLs
 .IP "\s-1RFC 2822:\s0" 10
 .IX Item "RFC 2822:"
 Internet Message Format
+.IP "\s-1RFC 4648:\s0" 10
+.IX Item "RFC 4648:"
+The Base16, Base32, and Base64 Data Encodings
 .IP "\s-1RFC 5322:\s0" 10
 .IX Item "RFC 5322:"
 Internet Message Format

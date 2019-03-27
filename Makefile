@@ -1,6 +1,7 @@
 NULL    = /dev/null
 SHEBANG = $(shell which bash 2>$(NULL) || which ksh 2>$(NULL) || which sh 2>$(NULL))
 PROG    = mailatt
+PROG2   = mime-identify
 SECTION = 1
 PODOPTS = --release=' ' --center=' ' --date=`date +%Y-%m-%d` \
 	  --section=$(SECTION) --name=$(PROG)
@@ -20,11 +21,12 @@ help: ## Display this help
 	@awk 'BEGIN { FS = ":.*## "; tab = 12; color = "\033[36m"; indent = "  "; printf "\nUsage:\n  make " color "<target>\033[0m\n\nRecognized targets:\n" } /^[a-zA-Z0-9%_-]+:.*?## / { pad = sprintf("\n%" tab "s" indent, "", $$2); gsub(/\\n/, pad); printf indent color "%-" tab "s\033[0m%s\n", $$1, $$2 } /^##@ / { gsub(/\\n/, "\n"); printf "\n%s\n", substr($$0, 5) } END { print "" }' $(MAKEFILE_LIST) # v1.43
 
 .PHONY: all
-all: bin mandoc ## Fix shebang line in script file; generate manpage (all formats)
+all: bin mandoc ## Fix shebang line in script files; generate manpage (all formats)
 
 .PHONY: bin
-bin: $(PROG) ## Fix shebang line in script file
-	sed -i.bak 's,^#!.*,#!$(SHEBANG),' $<
+bin: $(PROG) ## Fix shebang line in script files
+	sed -i.bak 's,^#!.*,#!$(SHEBANG),' $(PROG)
+	sed -i.bak 's,^#!.*,#!$(SHEBANG),' $(PROG2)
 
 .PHONY: man
 man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
