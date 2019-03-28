@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.17.1
+.ds Vw @(#) mailatt 1.17.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -278,7 +278,8 @@ for all subsequent attachments and header lines.  This is the default
 if unspecified.
 .Sp
 This option is called \fB\-m\fR as a reference to \fImmencode\fR\|(1). However,
-\&\fBmailatt\fR does not require any external \fImmencode\fR\|(1) program.
+\&\fBmailatt\fR does not require any external \fImmencode\fR\|(1) program; instead,
+it handles the encoding itself.
 .Sp
 See also \fB\-q\fR.
 .IP "\-q" 4
@@ -332,6 +333,9 @@ Specify subject for the e\-mail.
 This option may be used multiple times, and in any position on the commandline.
 It indicates that \fBuuencode\fR should be used as Content-Transfer-Encoding
 for all subsequent attachments (header lines will be base64\-encoded).
+.Sp
+\&\fBmailatt\fR does not require any external \fIuuencode\fR\|(1) program; instead, it
+handles the encoding itself.
 .Sp
 \&\fBWarning\fR: not all e\-mail clients support this.  The use of this option
 is therefore discouraged; use \fB\-m\fR instead.
