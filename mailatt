@@ -4,15 +4,16 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18
+# Version:	1.18.1
 # Created:	2011-02-11
-# Date:		2019-03-28
+# Date:		2019-03-29
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
-#			[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]
-#			[ -H <headerline> ] [ -d ] [ -Iai ] [ -8mqu ]
-#			[ -C <charset> ] [ -M mimetype ] [ <file1> .. <filen> ]
+# Usage:	mailatt [ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]
+#			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
+#			[ -s <subject> ] [ -H <headerline> ]
+#			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
+#			[ <file1> .. <filen> ]
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
@@ -32,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18
+.ds Vw @(#) mailatt 1.18.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -84,11 +85,11 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0 [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]"
-	f_echo "\t\t[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]"
-	f_echo "\t\t[ -H <headerline> ] [ -8Iadimqu ]"
+	f_echo "Usage: $argv0\t[ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
+	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
-	f_echo "       $argv0 { -h | -v }"
+	f_echo "       $argv0\t{ -h | -v }"
 }
 
 f_version() {
@@ -588,6 +589,7 @@ f_attachit() {
 		namespec=
 		fnamespec=
 	fi
+	test -n "$verbose" && f_echo "Attaching $fname..." >&2
 	f_echo "--$boundary"
 	f_echo "Content-ID: <$(f_contentid "$fname")>"
 	f_echo "Content-Disposition: $inline_or_attachment$fnamespec"
@@ -636,7 +638,7 @@ f_attachment() { # {a|b} mimetype
 
 f_process_all_files() {
 	for opt in "$@"; do
-		# process options, if any might follow
+		# process options, if the end of the options has not been flagged
 		if [ -z "${end_opts#0}" ]; then
 			if [ "$charset_coming_up" ]; then
 				charset="$opt"
@@ -702,7 +704,7 @@ f_process_one_file() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
+while getopts "8C:H:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
@@ -716,6 +718,8 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 			specify_inline_filename=1
 			;;
 		M)	mimetype="$OPTARG"
+			;;
+		V)	verbose=1
 			;;
 		a)	inline_or_attachment=inline
 			specify_inline_filename=
@@ -738,8 +742,8 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 		v)	f_version
 			exit 0
 			;;
-		*)	f_echo "$argv0: Invalid option: $currentopt" 1>&2
-			f_usage
+		*)	# 'getopts' already gives a message on stderr
+			f_usage 1>&2
 			exit 1
 			;;
 	esac
@@ -768,23 +772,47 @@ B<mailatt> - send e-mail with attachments
 
 =head1 SYNOPSIS
 
-C<mailatt>
-S<<	C<[ -r >I<recipients>C< ]>		>>
-S<<	C<[ -c >I<cc-addresses>C< ]>		>>
-S<<	C<[ -b >I<bcc-addresses>C< ]>		>>
-S<<	C<[ -f >I<from>C< ]>			>>
-S<<	C<[ -R >I<reply-to-addresses>C< ]>	>>
-S<<	C<[ -s >I<subject>C< ]>			>>
-S<<	C<[ -H >I<headerline>C< ]>		>>
-S<<	C<[ -8Iadimqu ]>			>>
-S<<	C<[ -C >I<charset>C< ]>			>>
-S<<	C<[ -M >I<mime-type>C< ]>		>>
-S<<	C<[ >I<file1 .. filen>C< ]>		>>
+=for roff
+.ad l
+
+S<< C<mailatt [>I< message options >C<|>I< encoding options >C<|>I< header options> >>
+S<< C<|>I< debug options >C<]> >>
+S<< C<[>I< encoding options >C<| -- |>I< file>... C<]> >>
 
 C<mailatt { -h | -v }>
 
+=over 4
+
+=item Message options:
+
+S<<  C<[ -Iai ]>                          >>
+
+=item Debug options:
+
+S<<  C<[ -Vd ]>                           >>
+
+=item Header options:
+
+S<<  C<[ -r >I<recipients>C< ]>           >>
+S<<  C<[ -c >I<cc-addresses>C< ]>         >>
+S<<  C<[ -b >I<bcc-addresses>C< ]>        >>
+S<<  C<[ -f >I<from>C< ]>                 >>
+S<<  C<[ -R >I<reply-to-addresses>C< ]>   >>
+S<<  C<[ -s >I<subject>C< ]>              >>
+S<<  C<[ -H >I<headerline>C< ]>           >>
+
+=item Encoding options:
+
+S<<  C<[ -C >I<charset>C< ]>              >>
+S<<  C<[ -M >I<mime-type>C< ]>            >>
+S<<  C<[ -8mqu ]>                         >>
+
+=back
+
+=for roff
+.ad n
+
 Please note that the order of the commandline options is significant.
-See especially B<-8CMmqu>.
 
 =head1 DESCRIPTION
 
@@ -795,33 +823,41 @@ of any format.
 
 =item -
 
-Plaintext files are supposed to be clean 7-bit ASCII unless another character
+Files of type I<text/*> and those that are known to be ASCII-only (like many
+script types) will be attached using quoted-printable encoding by default
+(but see the B<-m> option below).
+
+These files are supposed to be clean 7-bit ASCII unless another character
 set has been specified on the commandline.  See the B<-C> option below.
 
 =item -
 
-Files of type I<text/*> and those that are known to be ASCII-only will be
-attached using quoted-printable encoding by default (but see the B<-m> and B<-q>
-options below).
+Binary files (I<i.e.> files having MIME types other than I<text/*>) will
+be attached using base64 encoding by default (but see the B<-q> option below).
 
 =item -
 
 Files of type I<message/*> or I<multipart/*> will always be attached using
-8bit-encoding, as required by RFC 2045.
-
-=item -
-
-Binary files (I<i.e.> files having MIME types other than I<text/*>) will
-be attached using base64 encoding by default (but see the B<-m> and B<-q>
-options below).
+8bit-encoding, because of requirements imposed by RFC 2045.
 
 =back
 
-B<mailatt> can send messages in two possible formats.  I<multipart/mixed>
-is used to send a collection of files which are not necessarily related.
-I<multipart/alternative> is used to provide alternative representations
-of the same message (I<e.g.> plain text and HTML), in which case the mail
-client can select one to present.  See also the B<-a> option below.
+B<mailatt> can send messages in two possible formats:
+
+=over 4
+
+=item I<multipart/mixed>
+
+This is the default.  It signifies that the message contains a collection
+of files which are not necessarily related.
+
+=item I<multipart/alternative>
+
+This message type can be used to provide alternative representations of the
+same file (I<e.g.> plain text and HTML), in which case the mail client
+can select one to present.  See also the B<-a> option below.
+
+=back
 
 =head1 OPTIONS
 
@@ -873,14 +909,17 @@ is therefore discouraged; use B<-i> instead.
 
 =item -M I<mime-type>
 
-Specifies the MIME type to be used for the following file. If not
-specified, the MIME type is inferred from the filename extension.
-
-The encoding is determined from the MIME type.
+Specifies the MIME type to be used for the next file on the commandline.
+If not specified, the MIME type is inferred from the filename extension.
 
 =item -R I<addr1>[,I<addr2...>]
 
 Specify Reply-To: addresses for the e-mail. See B<-r> for allowed formats.
+
+=item -V
+
+For debugging purposes only.  The name of each file will be reported on
+I<stderr> when it is attached.
 
 =item -a
 
@@ -999,6 +1038,11 @@ See also B<-m> and B<-q>.
 
 Display version information and exit.
 
+=item --
+
+Indicates that no more options follow; all the remaining commandline
+arguments are to be interpreted as filenames.
+
 =item I<file1> [ I<file2>... ]
 
 Indicate which files should be attached to the mail.  Depending on the
@@ -1068,7 +1112,7 @@ Add a Sender: line to the mail header:
 
   mailatt -r all@company.com -s 'Important announcement' -i
           -H 'Sender: secretary@company.com' -f ceo@company.com
-	  message.html
+          message.html
 
 Send a mail with mixed character sets:
 
@@ -1170,20 +1214,19 @@ The Base16, Base32, and Base64 Data Encodings
 
 Internet Message Format
 
-=for author only: RFC 1521: MIME Part One: Mechanisms for Specifying and Describing
-the Format of Internet Message Bodies
+=begin comment
 
-=for author only: RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 1521: MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
+RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 2646: The text/plain Format parameter
+RFC 4021: Registration of Mail and MIME Header Fields
 
-=for author only: RFC 2646: The text/plain Format parameter
+Character sets:
+https://www.iana.org/assignments/character-sets/character-sets.xhtml
+http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
+https://www.ibm.com/support/knowledgecenter/en/SSVRGU_10.0.1/basic/LSAZ_APPENDIX_E_MIME_CHARSET_NAMES.html
 
-=for author only: RFC 4021: Registration of Mail and MIME Header Fields
-
-=for author only: Character sets: https://www.iana.org/assignments/character-sets/character-sets.xhtml
-
-=for author only: Character sets: http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
-
-=for author only: Character sets: https://www.ibm.com/support/knowledgecenter/en/SSVRGU_10.0.1/basic/LSAZ_APPENDIX_E_MIME_CHARSET_NAMES.html
+=end comment
 
 =back
 

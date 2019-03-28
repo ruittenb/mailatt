@@ -34,6 +34,10 @@ man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
 .PHONY: mandoc
 mandoc: $(PROG).pdf ## Generate manpage (ps and pdf format)
 
+.PHONY: readman
+readman: $(PROG).$(SECTION) ## Display the manpage
+	man ./$(PROG).$(SECTION)
+
 $(PROG).$(SECTION): $(PROG)
 	pod2man $(PODOPTS) $< | sed 's/@(#)ms.acc/ms.acc/' > $@
 
@@ -44,7 +48,10 @@ $(PROG).pdf: $(PROG).ps
 	ps2pdf $<
 
 .PHONY: test
-test: $(PROG) ## Run simple test
+test: $(PROG) ## Run simple tests
+	@./$(PROG) -h |                                                 \
+		grep '^Usage:' >$(NULL) &&				\
+		echo 'Test  0 succesful (usage)'
 	@./$(PROG) -d |                                                 \
 		grep '^Content-Type: multipart/mixed' >$(NULL) &&       \
 		echo 'Test  1 succesful (content-type)'

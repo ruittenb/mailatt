@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18
+.ds Vw @(#) mailatt 1.18.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -144,7 +144,20 @@ This manual pertains to \fBmailatt\fP version \\$3.
 mailatt \- send e\-mail with attachments
 .SH "SYNOPSIS"
 .IX Header "SYNOPSIS"
-\&\f(CW\*(C`mailatt\*(C'\fR
+.ad l
+\&\f(CW\*(C`mailatt\ [\*(C'\fR\fI\ message\ options\ \fR\f(CW\*(C`|\*(C'\fR\fI\ encoding\ options\ \fR\f(CW\*(C`|\*(C'\fR\fI\ header\ options\fR
+\&\f(CW\*(C`|\*(C'\fR\fI\ debug\ options\ \fR\f(CW\*(C`]\*(C'\fR
+\&\f(CW\*(C`[\*(C'\fR\fI\ encoding\ options\ \fR\f(CW\*(C`|\ \-\-\ |\*(C'\fR\fI\ file\fR...\ \f(CW\*(C`]\*(C'\fR
+.PP
+\&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
+.IP "Message options:" 4
+.IX Item "Message options:"
+\&\f(CW\*(C`[\ \-Iai\ ]\*(C'\fR
+.IP "Debug options:" 4
+.IX Item "Debug options:"
+\&\f(CW\*(C`[\ \-Vd\ ]\*(C'\fR
+.IP "Header options:" 4
+.IX Item "Header options:"
 \&\f(CW\*(C`[\ \-r\ \*(C'\fR\fIrecipients\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-c\ \*(C'\fR\fIcc-addresses\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-b\ \*(C'\fR\fIbcc-addresses\fR\f(CW\*(C`\ ]\*(C'\fR
@@ -152,39 +165,42 @@ mailatt \- send e\-mail with attachments
 \&\f(CW\*(C`[\ \-R\ \*(C'\fR\fIreply-to-addresses\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-s\ \*(C'\fR\fIsubject\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-H\ \*(C'\fR\fIheaderline\fR\f(CW\*(C`\ ]\*(C'\fR
-\&\f(CW\*(C`[\ \-8Iadimqu\ ]\*(C'\fR
+.IP "Encoding options:" 4
+.IX Item "Encoding options:"
 \&\f(CW\*(C`[\ \-C\ \*(C'\fR\fIcharset\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-M\ \*(C'\fR\fImime-type\fR\f(CW\*(C`\ ]\*(C'\fR
-\&\f(CW\*(C`[\ \*(C'\fR\fIfile1\ ..\ filen\fR\f(CW\*(C`\ ]\*(C'\fR
-.PP
-\&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
+\&\f(CW\*(C`[\ \-8mqu\ ]\*(C'\fR
+.ad n
 .PP
 Please note that the order of the commandline options is significant.
-See especially \fB\-8CMmqu\fR.
 .SH "DESCRIPTION"
 .IX Header "DESCRIPTION"
 \&\fBmailatt\fR is used to send multipart \s-1MIME\s0 e\-mail with file attachments
 of any format.
 .IP "\-" 3
-Plaintext files are supposed to be clean 7\-bit \s-1ASCII\s0 unless another character
+Files of type \fItext/*\fR and those that are known to be ASCII-only (like many
+script types) will be attached using quoted-printable encoding by default
+(but see the \fB\-m\fR option below).
+.Sp
+These files are supposed to be clean 7\-bit \s-1ASCII\s0 unless another character
 set has been specified on the commandline.  See the \fB\-C\fR option below.
 .IP "\-" 3
-Files of type \fItext/*\fR and those that are known to be ASCII-only will be
-attached using quoted-printable encoding by default (but see the \fB\-m\fR and \fB\-q\fR
-options below).
+Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
+be attached using base64 encoding by default (but see the \fB\-q\fR option below).
 .IP "\-" 3
 Files of type \fImessage/*\fR or \fImultipart/*\fR will always be attached using
-8bit\-encoding, as required by \s-1RFC 2045.\s0
-.IP "\-" 3
-Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
-be attached using base64 encoding by default (but see the \fB\-m\fR and \fB\-q\fR
-options below).
+8bit\-encoding, because of requirements imposed by \s-1RFC 2045.\s0
 .PP
-\&\fBmailatt\fR can send messages in two possible formats.  \fImultipart/mixed\fR
-is used to send a collection of files which are not necessarily related.
-\&\fImultipart/alternative\fR is used to provide alternative representations
-of the same message (\fIe.g.\fR plain text and \s-1HTML\s0), in which case the mail
-client can select one to present.  See also the \fB\-a\fR option below.
+\&\fBmailatt\fR can send messages in two possible formats:
+.IP "\fImultipart/mixed\fR" 4
+.IX Item "multipart/mixed"
+This is the default.  It signifies that the message contains a collection
+of files which are not necessarily related.
+.IP "\fImultipart/alternative\fR" 4
+.IX Item "multipart/alternative"
+This message type can be used to provide alternative representations of the
+same file (\fIe.g.\fR plain text and \s-1HTML\s0), in which case the mail client
+can select one to present.  See also the \fB\-a\fR option below.
 .SH "OPTIONS"
 .IX Header "OPTIONS"
 .IP "\-8" 4
@@ -231,13 +247,15 @@ provided only for backward-compatibility.  The use of this option
 is therefore discouraged; use \fB\-i\fR instead.
 .IP "\-M \fImime-type\fR" 4
 .IX Item "-M mime-type"
-Specifies the \s-1MIME\s0 type to be used for the following file. If not
-specified, the \s-1MIME\s0 type is inferred from the filename extension.
-.Sp
-The encoding is determined from the \s-1MIME\s0 type.
+Specifies the \s-1MIME\s0 type to be used for the next file on the commandline.
+If not specified, the \s-1MIME\s0 type is inferred from the filename extension.
 .IP "\-R \fIaddr1\fR[,\fIaddr2...\fR]" 4
 .IX Item "-R addr1[,addr2...]"
 Specify Reply-To: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
+.IP "\-V" 4
+.IX Item "-V"
+For debugging purposes only.  The name of each file will be reported on
+\&\fIstderr\fR when it is attached.
 .IP "\-a" 4
 .IX Item "-a"
 Use \fImultipart/alternative\fR for the mail message instead of the default
@@ -344,6 +362,9 @@ See also \fB\-m\fR and \fB\-q\fR.
 .IP "\-v" 4
 .IX Item "-v"
 Display version information and exit.
+.IP "\-\-" 4
+Indicates that no more options follow; all the remaining commandline
+arguments are to be interpreted as filenames.
 .IP "\fIfile1\fR [ \fIfile2\fR... ]" 4
 .IX Item "file1 [ file2... ]"
 Indicate which files should be attached to the mail.  Depending on the
