@@ -4,7 +4,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18.2
+# Version:	1.18.3
 # Created:	2011-02-11
 # Date:		2019-03-29
 # Author:	Rene Uittenbogaard
@@ -20,7 +20,6 @@
 #		test: ash (busybox) compatibility
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
-#		fix arguments for f_adjust_linelen
 #
 
 # The main program code starts at the label '# main'
@@ -34,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18.2
+.ds Vw @(#) mailatt 1.18.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -236,6 +235,8 @@ f_add_addresses() {
 #
 # Not all systems have mmencode(1); therefore, we'll encode it here
 #
+# @param {int} whether we are encoding a mime part (0) or header field (1)
+#
 f_base64encode_bytes() {
 	# Tested on:
 	#    HP-UX 10.20
@@ -349,7 +350,7 @@ f_uuencode_bytes() {
 #
 # QP-encode the output of the hexdump/octal dump.
 #
-# @param {int} whether we are encoding for the body (0) or header (1)
+# @param {int} whether we are encoding a mime part (0) or header field (1)
 # @param {int} whether we want compact (0) or readable, linewise encoding (1)
 #
 f_qpencode_bytes() {
@@ -383,12 +384,14 @@ f_qpencode_bytes() {
 }
 
 f_base64encode_file() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 53 | f_base64encode_bytes 0
+	# number of fields MUST be a multiple of 3
+	f_dissect ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
 }
 
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
-	f_dissect ${1:+"$1"} | f_adjust_linelen 44 | f_uuencode_bytes 0
+	# number of fields MUST be a multiple of 3
+	f_dissect ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0
 	f_echo "\`\nend"
 }
 
@@ -408,8 +411,9 @@ f_qpencode_file_linewise() {
 # @param {int} new number of byte fields per line, not counting the first ('offset') field
 #
 f_adjust_linelen() {
-	$awk -v maxfields="${1:-17}" '
+	$awk -v maxfields="${1:-18}" '
 		BEGIN {
+			r = 0
 			# the first field is not accurate any more,
 			# but it is discarded by f_*encode_line anyway
 			printf("0000000")
@@ -417,7 +421,7 @@ f_adjust_linelen() {
 		{
 			for (i = 2; i <= NF; i++) {
 				printf(" %3d", $i)
-				if (++r > maxfields) {
+				if (++r >= maxfields) {
 					r = 0
 					printf("\n%s", "0000000")
 				}
