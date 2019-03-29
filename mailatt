@@ -4,7 +4,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.17
+# Version:	1.17.1
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -34,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.17
+.ds Vw @(#) mailatt 1.17.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -132,17 +132,6 @@ f_find_cid_data() {
 	cidtime="$(date +"%Y%m%d%H%M%S")"
 	cidrandom="`f_boundbits`"
 	cidhost="$(hostname)" 2>/dev/null
-}
-
-f_fold() {
-	fname="$#"
-	# RFC 5322: Lines of characters in the body MUST be limited to 998 characters.
-	if [ "x$1" == x- ]; then
-		# Darwin doesn't support '-' as inputfile for stdin
-		fold -w992
-	else
-		fold -w992 "$1"
-	fi
 }
 
 f_onlcr() {
