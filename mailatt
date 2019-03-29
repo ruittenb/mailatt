@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.14.3
+# Version:	1.15
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -15,14 +15,11 @@
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
-#		test: send yenc with -8
-#		feat: make -8 less magic and always acceptable
 #		bug?: convert to crlf for qp? f_onlcr?
 #		feat: implement multipart/related using content-id?
 #		feat: mailatt_args in header
 #		feat: Content-MD5 header?
 #		feat: move builtin MIME list to external file?
-#		feat: make separate qpencode for textfiles?
 #		feat: make -m, -u also for textfiles?
 #
 
@@ -37,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.14.3
+.ds Vw @(#) mailatt 1.15
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -57,7 +54,6 @@ f_initialize() {
 	charset=us-ascii
 	mixed_or_alternative=mixed
 	inline_or_attachment=attachment
-	allow8bit=0
 }
 
 f_setpath() {
@@ -149,8 +145,10 @@ f_encode_header() {
 		f_echo "$1"
 	else
 		indent=
-		f_echon "$1" | f_dissect | f_extend_linelen 330 | $awk 'NF > 1 { print }' | while read hline; do
-			f_echo "${indent}=?${charset}?${hencoding}?$(f_echon "$hline" | $hencoder 1)?="
+		f_echon "$1" | f_dissect | f_extend_linelen 330 | $awk 'NF > 1 { print }' | while read header_line;
+		do
+			encoded="$(f_echon "$header_line" | $header_encoder 1)"
+			f_echo "${indent}=?${charset}?${header_encoding}?${encoded}?="
 			indent='\t'
 		done
 	fi
@@ -378,8 +376,8 @@ f_select_encoder() {
 		u)	if f_has uuencode; then
 				encoding=uuencode
 				encoder=uuencode
-				hencoding=B
-				hencoder=f_base64encode_line
+				header_encoding=B
+				header_encoder=f_base64encode_line
 			else
 				f_echo "$argv0: Warning: no uuencode found, using base64 instead" 1>&2
 				f_select_encoder m
@@ -387,18 +385,23 @@ f_select_encoder() {
 			;;
 		m)	encoding=base64
 			encoder=f_base64encode_file
-			hencoding=B
-			hencoder=f_base64encode_line
+			header_encoding=B
+			header_encoder=f_base64encode_line
 			;;
 		q)	encoding=quoted-printable
 			encoder=f_qpencode_file
-			hencoding=Q
-			hencoder=f_qpencode_line
+			header_encoding=Q
+			header_encoder=f_qpencode_line
+			;;
+		8)	encoding=8bit
+			encoder=cat
+			header_encoding=B
+			header_encoder=f_base64encode_line
 			;;
 		*)	encoding=binary
 			encoder=cat
-			hencoding=B
-			hencoder=f_base64encode_line
+			header_encoding=B
+			header_encoder=f_base64encode_line
 			;;
 	esac
 }
@@ -504,11 +507,11 @@ f_attachit() {
 		b)	f_echo "Content-Type: $contenttype$namespec"
 			f_binattach "$fname" "$neatname"
 			;;
-		8)	f_echo "Content-Type: $contenttype$namespec"
-			f_echo "Content-Transfer-Encoding: 8bit"
-			f_echo
-			cat "$fname"
-			;;
+#		8)	f_echo "Content-Type: $contenttype$namespec"
+#			f_echo "Content-Transfer-Encoding: 8bit"
+#			f_echo
+#			cat "$fname"
+#			;;
 	esac
 }
 
@@ -522,9 +525,6 @@ f_attachment() { # type a/b
 		else
 			contenttype=application/octet-stream
 		fi
-	fi
-	if [ "$ascbin" = 8 -a -z "${allow8bit#0}" ]; then
-		ascbin=b
 	fi
 	if [ "X$fname" = X- ]; then
 		f_termmess
@@ -568,7 +568,7 @@ f_process_all_files() {
 					mimetype_coming_up=1
 				fi
 				continue
-			elif [ "x${opt#-[muq]}" != "x$opt" ]; then
+			elif [ "x${opt#-[muq8]}" != "x$opt" ]; then
 				f_select_encoder ${opt#-}
 				continue
 			elif [ "x$opt" = x-- ]; then
@@ -653,7 +653,7 @@ f_process_one_file() {
 		*.deb|*.ar)		f_attachment application/x-ar			b ;;
 		*.hqx)			f_attachment application/mac-binhex40		b ;;
 		*.sit)			f_attachment application/x-stuffit		b ;;
-		*.ync)			f_attachment application/x-yenc-encoded		8 ;;
+		*.ync|*.yenc)		f_attachment application/x-yenc-encoded		b ;;
 		*.shar)			f_attachment application/x-shar			a ;;
 		*.uu|*.uue)		f_attachment text/x-uuencode			a ;;
 		# audio formats
@@ -724,8 +724,6 @@ f_initialize "${argv0:=$(basename $0)}"
 
 while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
-		8)	allow8bit=1
-			;;
 		C)	charset="$OPTARG"
 			;;
 		H)	if [ "$headerlines" ]; then
@@ -745,7 +743,7 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 			;;
 		d)	MAILATT_DEBUG=1
 			;;
-		[muq])	f_select_encoder $currentopt
+		[muq8])	f_select_encoder $currentopt
 			;;
 		[bcfrR]) f_add_addresses "$OPTARG"
 			;;
@@ -827,14 +825,8 @@ attached using quoted-printable encoding.
 =item -
 
 Binary files (I<i.e.> files having MIME types other than I<text/*>) will
-be attached base64-encoded by default (but see the B<-q> and B<-u> options
-below).
-
-=item -
-
-If explicitly requested, yEncoded files (F<*.ync>) will be attached as-is
-(8bit-encoded).  Note that not all Mail Transfer Agents can handle this
-type of transfer cleanly. See the B<-8> option below.
+be attached base64-encoded by default (but see the B<-m> and B<-q>
+options below).
 
 =back
 
@@ -850,11 +842,14 @@ client can select one to present.  See also the B<-a> option below.
 
 =item -8
 
-Include certain MIME types (currently only yEncoded files) using 8bit
-encoding.  The default is to include all binary files using base64 encoding.
-The reason for allowing this is that yEncoded files are supposed to
-use less bandwidth. This method is, however, not supported by all Mail
-Transfer Agents.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that B<8bit> should be used as Content-Transfer-Encoding
+for all subsequent binary attachments (header lines will be base64-encoded).
+
+B<Warning>: not all e-mail clients support this.  The use of this option
+is therefore discouraged; use B<-m> instead.
+
+See also B<-m> and B<-q>.
 
 =item -C I<charset>
 
@@ -874,10 +869,9 @@ This option is nearly identical to B<-i>, but uses the "old" behavior,
 which is to include a filename for all MIME parts, even those that are
 attached using C<Content-Disposition: inline>.
 
-B<Warning:> not all e-mail clients support this.  This option is
-provided only for backward-compatibility.
-
-The use of this option is discouraged; use B<-i> instead.
+B<Warning>: not all e-mail clients support this.  This option is
+provided only for backward-compatibility.  The use of this option
+is therefore discouraged; use B<-i> instead.
 
 =item -M I<mime-type>
 
@@ -931,21 +925,26 @@ The option B<-a> takes precedence over B<-i>.
 
 =item -m
 
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that base64 encoding should be used for all
-subsequent binary attachments and header lines.  This is the default
+This option may be used multiple times, and in any position on the commandline.
+It indicates that B<base64> should be used as Content-Transfer-Encoding
+for all subsequent binary attachments and header lines.  This is the default
 if unspecified.
 
 This option is called B<-m> as a reference to mmencode(1). However,
 B<mailatt> does not require any external mmencode(1) program.
 
+See also B<-q>.
+
 =item -q
 
-This option may be used multiple times, and in any position on the
-commandline.  It indicates that quoted-printable encoding should be used
-for all binary attachments and header lines.  Although quoted-printable
-is normally only used for ASCII attachments, B<mailatt>'s implementation
-will make binaries come through intact.
+This option may be used multiple times, and in any position on the commandline.
+It indicates that B<quoted-printable> should be used as Content-Transfer-Encoding
+for all subsequent binary attachments and header lines.
+
+Although quoted-printable is normally only used for ASCII attachments,
+B<mailatt> also supports this encoding for binaries.
+
+See also B<-m>.
 
 =item -r I<addr1>[,I<addr2..>]
 
@@ -986,12 +985,13 @@ Specify subject for the e-mail.
 =item -u
 
 This option may be used multiple times, and in any position on the commandline.
-It indicates that uuencode should be used as Content-Transfer-Encoding
-for all binary attachments.
+It indicates that B<uuencode> should be used as Content-Transfer-Encoding
+for all subsequent binary attachments (header lines will be base64-encoded).
 
-B<Warning:> not all e-mail clients support this.
+B<Warning>: not all e-mail clients support this.  The use of this option
+is therefore discouraged; use B<-m> instead.
 
-The use of this option is discouraged; use B<-m> instead.
+See also B<-m> and B<-q>.
 
 =item -v
 
