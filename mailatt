@@ -4,7 +4,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.16.2
+# Version:	1.16.3
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -34,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.16.2
+.ds Vw @(#) mailatt 1.16.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -109,8 +109,8 @@ f_getusername() {
 	} | $awk -F: '$1 == "'"$1"'" { sub(/,.*/, "", $5); print $5 }'
 }
 
-f_termmess() {
-	test -t 0 && f_echo "Reading document from stdin.." 1>&2
+f_notify_interactive() {
+	test -t 0 && f_echo "Reading document from stdin..." 1>&2
 }
 
 f_lowercase() {
@@ -219,25 +219,8 @@ f_add_addresses() {
 	addresses="$to $addressline${addresses:+\\n$addresses}"
 }
 
-f_urlencode_line() {
-	$awk '{
-		# these two MUST come first
-		gsub(/%/,  "%25"); gsub(/+/,  "%2B");
-		#
-		gsub(/ /,  "%20"); gsub(/\"/, "%22"); gsub(/#/,  "%23");
-		gsub(/\$/, "%24"); gsub(/&/,  "%26"); gsub(/,/,  "%2C");
-		gsub(/\//, "%2F"); gsub(/:/,  "%3A"); gsub(/;/,  "%3B"); 
-		gsub(/</,  "%3C"); gsub(/=/,  "%3D"); gsub(/>/,  "%3E");
-		gsub(/?/,  "%3F"); gsub(/@/,  "%40"); gsub(/\[/, "%5B"); 
-		gsub(/\\/, "%5C"); gsub(/]/,  "%5D"); gsub(/\^/, "%5E");
-		gsub(/`/,  "%60"); gsub(/{/,  "%7B"); gsub(/}/,  "%7D");
-		gsub(/\|/, "%7C"); gsub(/~/,  "%7E");
-		print
-	}'
-}
-
 # not all systems have mmencode(1); therefore, we'll encode it here
-f_base64encode_line() {
+f_base64encode_bytes() {
 	# Tested on:
 	#	HP-UX 10.20
 	#	HP-UX 11.11
@@ -297,7 +280,7 @@ f_base64encode_line() {
 			BASE64     = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 		}
 		NF > 1 {
-			for (i=2; i<=NF; i++) store($i)
+			for (i = 2; i <= NF; i++) store($i)
 #			if (!inheader) printf("\n")
 			flush()
 		}
@@ -307,7 +290,7 @@ f_base64encode_line() {
 	'
 }
 
-f_qpencode_line() {
+f_qpencode_bytes() {
 	# Tested on:
 	#	HP-UX 10.20
 	#	HP-UX 11.11
@@ -316,19 +299,20 @@ f_qpencode_line() {
 	#	SuSE UnitedLinux 1.0
 	#	Debian 3.0
 	#	Darwin 17.7.0
-	$awk -v inheader="$1" '
+	$awk -v inheader="$1" -v linewise="$2" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
-			for (i=2; i<=NF; i++) {
+			for (i = 2; i <= NF; i++) {
 				# 61 is the equals sign
 				# 46 is the full stop, causes errors at start of line
 				#
-				if (($i>32) && ($i!=46)	 		\
-				&& ($i!=61) && ($i<127)) printf("%c", $i)
-				# next two lines are new
-				else if (($i==32) && (!inheader)	\
-				     && (i>2) && (i<NF)) printf(" ")
-				else			 printf("=%02X", $i)
+				if (($i > 32) && ($i != 46) \
+					&& ($i != 61) && ($i < 127))	printf("%c", $i)
+				else if (($i == 32) && (!inheader) \
+					&& (i > 2) && (i < NF))		printf(" ")
+				else if (($i == 10) && (!inheader) \
+					&& linewise)			printf("=0A=\n")
+				else					printf("=%02X", $i)
 			}
 		}
 		END {
@@ -338,11 +322,15 @@ f_qpencode_line() {
 }
 
 f_base64encode_file() {
-	f_dissect ${1:+"$1"} | f_extend_linelen 53 | f_base64encode_line 0
+	f_dissect ${1:+"$1"} | f_extend_linelen 53 | f_base64encode_bytes 0
 }
 
 f_qpencode_file() {
-	f_dissect ${1:+"$1"} | f_extend_linelen 23 | f_qpencode_line 0
+	f_dissect ${1:+"$1"} | f_extend_linelen 23 | f_qpencode_bytes 0
+}
+
+f_qpencode_file_linewise() {
+	f_dissect ${1:+"$1"} | f_extend_linelen 72 | f_qpencode_bytes 0 1
 }
 
 f_extend_linelen() {
@@ -353,7 +341,7 @@ f_extend_linelen() {
 			printf("0000000")
 		}
 		{
-			for (i=2; i<=NF; i++) {
+			for (i = 2; i <= NF; i++) {
 				printf(" %3d", $i)
 				if (++r > maxfields) {
 					r = 0
@@ -388,10 +376,10 @@ f_select_encoder() {
 		u)	if f_has uuencode; then
 				bin_encoding=uuencode
 				bin_encoder=uuencode
-				asc_encoding="$bin_encoding"
-				asc_encoder="$bin_encoder"
+				asc_encoding=uuencode
+				asc_encoder=uuencode
 				header_encoding=B
-				header_encoder=f_base64encode_line
+				header_encoder=f_base64encode_bytes
 			else
 				f_echo "$argv0: Warning: no uuencode found, using base64 instead" 1>&2
 				f_select_encoder m
@@ -399,38 +387,38 @@ f_select_encoder() {
 			;;
 		m)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
-			asc_encoding="$bin_encoding"
-			asc_encoder="$bin_encoder"
+			asc_encoding=base64
+			asc_encoder=f_base64encode_file
 			header_encoding=B
-			header_encoder=f_base64encode_line
+			header_encoder=f_base64encode_bytes
 			;;
 		q)	bin_encoding=quoted-printable
 			bin_encoder=f_qpencode_file
-			asc_encoding="$bin_encoding"
-			asc_encoder="$bin_encoder"
+			asc_encoding=quoted-printable
+			asc_encoder=f_qpencode_file_linewise
 			header_encoding=Q
-			header_encoder=f_qpencode_line
+			header_encoder=f_qpencode_bytes
 			;;
 		8)	bin_encoding=8bit
 			bin_encoder=cat
-			asc_encoding="$bin_encoding"
-			asc_encoder="$bin_encoder"
+			asc_encoding=8bit
+			asc_encoder=cat
 			header_encoding=B
-			header_encoder=f_base64encode_line
+			header_encoder=f_base64encode_bytes
 			;;
 		init)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
 			asc_encoding=quoted-printable
-			asc_encoder=f_qpencode_file
+			asc_encoder=f_qpencode_file_linewise
 			header_encoding=B
-			header_encoder=f_base64encode_line
+			header_encoder=f_base64encode_bytes
 			;;
 		*)	bin_encoding=binary
 			bin_encoder=cat
-			asc_encoding="$bin_encoding"
-			asc_encoder="$bin_encoder"
+			asc_encoding=binary
+			asc_encoder=cat
 			header_encoding=B
-			header_encoder=f_base64encode_line
+			header_encoder=f_base64encode_bytes
 			;;
 	esac
 }
@@ -498,26 +486,24 @@ f_binattach() {
 }
 
 f_ascattach() {
+	f_echo "Content-Transfer-Encoding: $asc_encoding"
+	f_echo
+	if [ "$asc_encoding" = uuencode ]; then
+		$asc_encoder "$1" "$2"
+	else
+		$asc_encoder "$1"
+	fi
+}
+
+f_msgattach() {
 	# RFC 2045 states: it is EXPRESSLY FORBIDDEN to use any encodings
 	# other than "7bit", "8bit", or "binary" with any composite media type,
 	# i.e. one that recursively includes other Content-Type fields.
 	# Currently the only composite media types are "multipart" and "message". 
-	if [	"$(f_lowercase $charset)" = us-ascii		\
-	-o	"$contenttype" != "${contenttype#message/}"	\
-	-o	"$contenttype" != "${contenttype#multipart/}"	];
-	then
-		f_echo "Content-Transfer-Encoding: 7bit"
-		f_echo
-		f_fold "$1"
-	else
-		f_echo "Content-Transfer-Encoding: $asc_encoding"
-		f_echo
-		if [ "$asc_encoding" = uuencode ]; then
-			$asc_encoder "$1" "$2"
-		else
-			$asc_encoder "$1"
-		fi
-	fi
+	#
+	f_echo "Content-Transfer-Encoding: 8bit"
+	f_echo
+	cat "$1"
 }
 
 f_attachit() {
@@ -532,18 +518,21 @@ f_attachit() {
 	f_echo "--$boundary"
 	f_echo "Content-ID: <$(f_contentid "$fname")>"
 	f_echo "Content-Disposition: $inline_or_attachment$fnamespec"
-	case "$ascbin" in
-		a)	f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
-			f_ascattach "$fname" "$neatname"
-			;;
-		b)	f_echo "Content-Type: $contenttype$namespec"
-			f_binattach "$fname" "$neatname"
-			;;
-#			;;
-	esac
+	if [ "${contenttype%%/*}" == message   \
+	-o   "${contenttype%%/*}" == multipart ];
+	then
+		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_msgattach "$fname" "$neatname"
+	elif [ "$ascbin" == a ]; then
+		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_ascattach "$fname" "$neatname"
+	else # [ $ascbin == b ]
+		f_echo "Content-Type: $contenttype$namespec"
+		f_binattach "$fname" "$neatname"
+	fi
 }
 
-f_attachment() { # a/b mimetype
+f_attachment() { # {a|b} mimetype
 	ascbin="$1"
 	contenttype="$2"
 	if [ "$contenttype" = default ]; then
@@ -555,7 +544,7 @@ f_attachment() { # a/b mimetype
 		fi
 	fi
 	if [ "x$fname" = x- ]; then
-		f_termmess
+		f_notify_interactive
 		neatname=stdin
 	elif [ ! -r "$fname" ]; then
 		f_echo "$argv0: Cannot attach \"$fname\": file not readable" >&2
@@ -620,10 +609,8 @@ f_process_all_files() {
 
 f_process_one_file() {
 	fname="$1"
-
-	# explicit mimetype requested?
-	mimetype="$2"
-	if [ "${mimetype#text/}" != "$mimetype" ]; then
+	mimetype="$2" # explicit mimetype requested?
+	if [ "${mimetype%%/*}" == text ]; then
 		f_attachment a "$mimetype"
 		return
 	elif [ "$mimetype" ]; then
@@ -735,21 +722,19 @@ of any format.
 
 =item -
 
-Files of type I<text/*> in US-ASCII will be attached as-is (7bit-encoded).
-
 Plaintext files are supposed to be clean 7-bit ASCII unless another character
 set has been specified on the commandline.  See the B<-C> option below.
 
 =item -
 
-Files of type I<text/*> in a character set other than US-ASCII will be
+Files of type I<text/*> and those that are known to be ASCII-only will be
 attached using quoted-printable encoding by default (but see the B<-m> and B<-q>
 options below).
 
 =item -
 
 Files of type I<message/*> or I<multipart/*> will always be attached using
-7bit-encoding, as required by RFC 2045.
+8bit-encoding, as required by RFC 2045.
 
 =item -
 
@@ -787,9 +772,20 @@ commandline.  It specifies the character set to be used for all subsequent
 attachments and header lines.  If unspecified, US-ASCII is used.
 See the EXAMPLES below.
 
+Some often used character sets:
+
+    US-ASCII     ISO-8859-6    GB18030        Windows-1251
+    UTF-8        ISO-8859-7    GB2312         Windows-1252
+    UTF-16       ISO-8859-8    Shift_JIS      Windows-1253
+    ISO-8859-1   ISO-8859-9    KOI8-R         Windows-1254
+    ISO-8859-2   ISO-8859-15   KOI8-U         Windows-1255
+    ISO-8859-3   EUC-JP        Big5           Windows-1256
+    ISO-8859-4   EUC-KR        Windows-874    Windows-1257
+    ISO-8859-5   EUC-CN        Windows-1250   Windows-1258
+
 =item -H I<headerline>
 
-Specifies a line to add to the mail header. The option can be used
+Specifies a line to add to the mail header. This option can be used
 multiple times. Do not end the line with a newline character.
 
 =item -I
@@ -809,7 +805,7 @@ specified, the MIME type is inferred from the filename extension.
 
 The encoding is determined from the MIME type.
 
-=item -R I<addr1>[,I<addr2..>]
+=item -R I<addr1>[,I<addr2...>]
 
 Specify Reply-To: addresses for the e-mail. See B<-r> for allowed formats.
 
@@ -821,11 +817,11 @@ with C<Content-Disposition: inline>, regardless of any B<-i> option.
 Note that the simplest representation of the mail (probably I<text/plain>)
 should be attached first.
 
-=item -b I<addr1>[,I<addr2..>]
+=item -b I<addr1>[,I<addr2...>]
 
 Specify Bcc: addresses for the e-mail. See B<-r> for allowed formats.
 
-=item -c I<addr1>[,I<addr2..>]
+=item -c I<addr1>[,I<addr2...>]
 
 Specify Cc: addresses for the e-mail. See B<-r> for allowed formats.
 
@@ -875,7 +871,7 @@ B<mailatt> also supports this encoding for binaries.
 
 See also B<-m>.
 
-=item -r I<addr1>[,I<addr2..>]
+=item -r I<addr1>[,I<addr2...>]
 
 Specify recipients (To: addresses) for the e-mail.
 
@@ -926,7 +922,7 @@ See also B<-m> and B<-q>.
 
 Display version information and exit.
 
-=item I<file1> [ I<file2>.. ]
+=item I<file1> [ I<file2>... ]
 
 Indicate which files should be attached to the mail.  Depending on the
 "extension" (I<i.e.> the filename part following a C<.> in the filename),
@@ -1105,6 +1101,12 @@ the Format of Internet Message Bodies
 =for author only: RFC 2646: The text/plain Format parameter
 
 =for author only: RFC 4021: Registration of Mail and MIME Header Fields
+
+=for author only: Character sets: https://www.iana.org/assignments/character-sets/character-sets.xhtml
+
+=for author only: Character sets: http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
+
+=for author only: Character sets: https://www.ibm.com/support/knowledgecenter/en/SSVRGU_10.0.1/basic/LSAZ_APPENDIX_E_MIME_CHARSET_NAMES.html
 
 =back
 

@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.16.2
+.ds Vw @(#) mailatt 1.16.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -166,17 +166,15 @@ See especially \fB\-8CMmqu\fR.
 \&\fBmailatt\fR is used to send multipart \s-1MIME\s0 e\-mail with file attachments
 of any format.
 .IP "\-" 3
-Files of type \fItext/*\fR in US-ASCII will be attached as-is (7bit\-encoded).
-.Sp
 Plaintext files are supposed to be clean 7\-bit \s-1ASCII\s0 unless another character
 set has been specified on the commandline.  See the \fB\-C\fR option below.
 .IP "\-" 3
-Files of type \fItext/*\fR in a character set other than US-ASCII will be
+Files of type \fItext/*\fR and those that are known to be ASCII-only will be
 attached using quoted-printable encoding by default (but see the \fB\-m\fR and \fB\-q\fR
 options below).
 .IP "\-" 3
 Files of type \fImessage/*\fR or \fImultipart/*\fR will always be attached using
-7bit\-encoding, as required by \s-1RFC 2045.\s0
+8bit\-encoding, as required by \s-1RFC 2045.\s0
 .IP "\-" 3
 Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
 be attached using base64 encoding by default (but see the \fB\-m\fR and \fB\-q\fR
@@ -205,9 +203,22 @@ This option may be used multiple times, and in any position on the
 commandline.  It specifies the character set to be used for all subsequent
 attachments and header lines.  If unspecified, US-ASCII is used.
 See the \s-1EXAMPLES\s0 below.
+.Sp
+Some often used character sets:
+.Sp
+.Vb 8
+\&    US\-ASCII     ISO\-8859\-6    GB18030        Windows\-1251
+\&    UTF\-8        ISO\-8859\-7    GB2312         Windows\-1252
+\&    UTF\-16       ISO\-8859\-8    Shift_JIS      Windows\-1253
+\&    ISO\-8859\-1   ISO\-8859\-9    KOI8\-R         Windows\-1254
+\&    ISO\-8859\-2   ISO\-8859\-15   KOI8\-U         Windows\-1255
+\&    ISO\-8859\-3   EUC\-JP        Big5           Windows\-1256
+\&    ISO\-8859\-4   EUC\-KR        Windows\-874    Windows\-1257
+\&    ISO\-8859\-5   EUC\-CN        Windows\-1250   Windows\-1258
+.Ve
 .IP "\-H \fIheaderline\fR" 4
 .IX Item "-H headerline"
-Specifies a line to add to the mail header. The option can be used
+Specifies a line to add to the mail header. This option can be used
 multiple times. Do not end the line with a newline character.
 .IP "\-I" 4
 .IX Item "-I"
@@ -224,8 +235,8 @@ Specifies the \s-1MIME\s0 type to be used for the following file. If not
 specified, the \s-1MIME\s0 type is inferred from the filename extension.
 .Sp
 The encoding is determined from the \s-1MIME\s0 type.
-.IP "\-R \fIaddr1\fR[,\fIaddr2..\fR]" 4
-.IX Item "-R addr1[,addr2..]"
+.IP "\-R \fIaddr1\fR[,\fIaddr2...\fR]" 4
+.IX Item "-R addr1[,addr2...]"
 Specify Reply-To: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
 .IP "\-a" 4
 .IX Item "-a"
@@ -234,11 +245,11 @@ Use \fImultipart/alternative\fR for the mail message instead of the default
 with \f(CW\*(C`Content\-Disposition: inline\*(C'\fR, regardless of any \fB\-i\fR option.
 Note that the simplest representation of the mail (probably \fItext/plain\fR)
 should be attached first.
-.IP "\-b \fIaddr1\fR[,\fIaddr2..\fR]" 4
-.IX Item "-b addr1[,addr2..]"
+.IP "\-b \fIaddr1\fR[,\fIaddr2...\fR]" 4
+.IX Item "-b addr1[,addr2...]"
 Specify Bcc: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
-.IP "\-c \fIaddr1\fR[,\fIaddr2..\fR]" 4
-.IX Item "-c addr1[,addr2..]"
+.IP "\-c \fIaddr1\fR[,\fIaddr2...\fR]" 4
+.IX Item "-c addr1[,addr2...]"
 Specify Cc: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
 .IP "\-d" 4
 .IX Item "-d"
@@ -280,8 +291,8 @@ Although quoted-printable is normally only used for \s-1ASCII\s0 attachments,
 \&\fBmailatt\fR also supports this encoding for binaries.
 .Sp
 See also \fB\-m\fR.
-.IP "\-r \fIaddr1\fR[,\fIaddr2..\fR]" 4
-.IX Item "-r addr1[,addr2..]"
+.IP "\-r \fIaddr1\fR[,\fIaddr2...\fR]" 4
+.IX Item "-r addr1[,addr2...]"
 Specify recipients (To: addresses) for the e\-mail.
 .Sp
 Each one of the addresses may be specified in one of the following
@@ -329,8 +340,8 @@ See also \fB\-m\fR and \fB\-q\fR.
 .IP "\-v" 4
 .IX Item "-v"
 Display version information and exit.
-.IP "\fIfile1\fR [ \fIfile2\fR.. ]" 4
-.IX Item "file1 [ file2.. ]"
+.IP "\fIfile1\fR [ \fIfile2\fR... ]" 4
+.IX Item "file1 [ file2... ]"
 Indicate which files should be attached to the mail.  Depending on the
 \&\*(L"extension\*(R" (\fIi.e.\fR the filename part following a \f(CW\*(C`.\*(C'\fR in the filename),
 a corresponding \s-1MIME\s0 type will be selected from a built-in list.
