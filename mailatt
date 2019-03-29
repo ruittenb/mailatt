@@ -4,7 +4,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18.1
+# Version:	1.18.2
 # Created:	2011-02-11
 # Date:		2019-03-29
 # Author:	Rene Uittenbogaard
@@ -20,6 +20,7 @@
 #		test: ash (busybox) compatibility
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
+#		fix arguments for f_adjust_linelen
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18.1
+.ds Vw @(#) mailatt 1.18.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -181,11 +182,11 @@ f_encode_header() {
 
 f_add_address() {
 	# allowed values for $addr:
-	#	user
-	#	<user>
-	#	<user@domain>
-	#	name <user>
-	#	name <user@domain>
+	#    user
+	#    <user>
+	#    <user@domain>
+	#    name <user>
+	#    name <user@domain>
 	# test whether $addr is of the form user <user@dom>
 	if [ "${addr##*<}" != "$addr" ]; then
 		# split into 'name' and 'user[@domain]' parts
@@ -237,13 +238,13 @@ f_add_addresses() {
 #
 f_base64encode_bytes() {
 	# Tested on:
-	#	HP-UX 10.20
-	#	HP-UX 11.11
-	#	AIX 4.2
-	#	SunOS 5.8
-	#	SuSE UnitedLinux 1.0
-	#	Debian 3.0
-	#	Darwin 17.7.0
+	#    HP-UX 10.20
+	#    HP-UX 11.11
+	#    AIX 4.2
+	#    SunOS 5.8
+	#    SuSE UnitedLinux 1.0
+	#    Debian 3.0
+	#    Darwin 17.7.0
 	$awk -v inheader="$1" '
 		# encode file to base64
 		# remotely based on a script by Peter van Eerten (c) March 6 2003
@@ -294,7 +295,7 @@ f_base64encode_bytes() {
 #
 f_uuencode_bytes() {
 	# Tested on:
-	#	Darwin 17.7.0
+	#    Darwin 17.7.0
 	$awk '
 		# uuencode file
 		# note: the number of bytes on each line MUST be a multiple of 3
@@ -353,27 +354,26 @@ f_uuencode_bytes() {
 #
 f_qpencode_bytes() {
 	# Tested on:
-	#	HP-UX 10.20
-	#	HP-UX 11.11
-	#	AIX 4.2
-	#	SunOS 5.8
-	#	SuSE UnitedLinux 1.0
-	#	Debian 3.0
-	#	Darwin 17.7.0
+	#    HP-UX 10.20
+	#    HP-UX 11.11
+	#    AIX 4.2
+	#    SunOS 5.8
+	#    SuSE UnitedLinux 1.0
+	#    Debian 3.0
+	#    Darwin 17.7.0
 	$awk -v inheader="$1" -v linewise="$2" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
 			for (i = 2; i <= NF; i++) {
-				# 61 is the equals sign
-				# 46 is the full stop, causes errors at start of line
+				# test if normal ascii, but not full stop (46)
+				# (causes errors at start of line) or equals sign (61)
 				#
-				if (($i > 32) && ($i != 46) \
-					&& ($i != 61) && ($i < 127))	printf("%c", $i)
-				else if (($i == 32) && (!inheader) \
-					&& (i > 2) && (i < NF))		printf(" ")
-				else if (($i == 10) && (!inheader) \
-					&& linewise)			printf("=0A=\n")
-				else					printf("=%02X", $i)
+				if (($i > 32) && ($i != 46) && ($i != 61) && ($i < 127))   printf("%c", $i)
+				# space
+				else if (($i == 32) && (!inheader) && (i > 2) && (i < NF)) printf(" ")
+				# newline
+				else if (($i == 10) && (!inheader) && linewise)            printf("=0A=\n")
+				else                                                       printf("=%02X", $i)
 			}
 		}
 		END {
@@ -459,8 +459,7 @@ f_dissect() {
 
 f_select_encoder() {
 	case "$1" in
-		u)	
-			bin_encoding=uuencode
+		u)	bin_encoding=uuencode
 			bin_encoder=f_uuencode_file
 			asc_encoding=uuencode
 			asc_encoder=f_uuencode_file
@@ -540,7 +539,7 @@ f_endmail() {
 }
 
 f_sendmail() {
-	f_onlcr | if [ "${MAILATT_DEBUG#0}" ]; then
+	f_onlcr | if [ -n "${MAILATT_DEBUG#0}" ]; then
 		cat
 	else
 		sendmail -t -i $envelope_from
@@ -582,7 +581,7 @@ f_msgattach() {
 
 f_attachit() {
 	let attno=attno+1
-	if [ "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
+	if [ -n "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
 		namespec="; name=\"$neatname\""
 		fnamespec="; name=\"$neatname\""
 	else
@@ -640,7 +639,7 @@ f_process_all_files() {
 	for opt in "$@"; do
 		# process options, if the end of the options has not been flagged
 		if [ -z "${end_opts#0}" ]; then
-			if [ "$charset_coming_up" ]; then
+			if [ -n "$charset_coming_up" ]; then
 				charset="$opt"
 				charset_coming_up=
 				continue
@@ -650,7 +649,7 @@ f_process_all_files() {
 					charset_coming_up=1
 				fi
 				continue
-			elif [ "$mimetype_coming_up" ]; then
+			elif [ -n "$mimetype_coming_up" ]; then
 				mimetype="$opt"
 				mimetype_coming_up=
 				continue
@@ -688,7 +687,7 @@ f_process_one_file() {
 	if [ "${mimetype%%/*}" == text ]; then
 		f_attachment a "$mimetype"
 		return
-	elif [ "$mimetype" ]; then
+	elif [ -n "$mimetype" ]; then
 		f_attachment b "$mimetype"
 		return
 	fi
@@ -708,7 +707,7 @@ while getopts "8C:H:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
-		H)	if [ "$headerlines" ]; then
+		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
 			else
 				headerlines="$OPTARG"
