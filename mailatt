@@ -4,7 +4,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.16.1
+# Version:	1.16.2
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -16,7 +16,8 @@
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
-#		bug?: convert to crlf for qp? f_onlcr?
+#		bug?: line endings in the body should be CRLF; handled by f_onlcr;
+#		      but we can only do that if we encode unix-style line endings.
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
 #		feat: internal uuencoder
@@ -33,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.16.1
+.ds Vw @(#) mailatt 1.16.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -148,7 +149,7 @@ f_onlcr() {
 	$awk '{
 		sub(/\015$/, "")
 		printf("%s\r\n", $0)
-	}' ${1:+"$1"}
+	}'
 }
 
 f_encode_header() {
@@ -469,7 +470,7 @@ f_endmail() {
 }
 
 f_sendmail() {
-	if [ "${MAILATT_DEBUG#0}" ]; then
+	f_onlcr | if [ "${MAILATT_DEBUG#0}" ]; then
 		cat
 	else
 		sendmail -t -i $envelope_from
