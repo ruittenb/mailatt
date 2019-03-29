@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.15
+# Version:	1.15.1
 # Created:	2011-02-11
 # Date:		2019-03-25
 # Author:	Rene Uittenbogaard
@@ -34,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.15
+.ds Vw @(#) mailatt 1.15.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -479,12 +479,13 @@ f_ascattach() {
 	then
 		f_echo "Content-Transfer-Encoding: 7bit"
 		f_echo
-#		f_onlcr "$1"
-		cat "$1"
+		# RFC 5322: Lines of characters in the body MUST be limited to 998 characters.
+		fold -w992 "$1"
 	else
-		f_echo "Content-Transfer-Encoding: quoted-printable"
-		f_echo
-		f_qpencode_file "$1"
+		f_binattach "$@"
+#		f_echo "Content-Transfer-Encoding: quoted-printable"
+#		f_echo
+#		f_qpencode_file "$1"
 	fi
 }
 
@@ -507,10 +508,6 @@ f_attachit() {
 		b)	f_echo "Content-Type: $contenttype$namespec"
 			f_binattach "$fname" "$neatname"
 			;;
-#		8)	f_echo "Content-Type: $contenttype$namespec"
-#			f_echo "Content-Transfer-Encoding: 8bit"
-#			f_echo
-#			cat "$fname"
 #			;;
 	esac
 }
@@ -821,6 +818,11 @@ set has been specified on the commandline.  See the B<-C> option below.
 
 Files of type I<text/*> in a character set other than US-ASCII will be
 attached using quoted-printable encoding.
+
+=item -
+
+Files of type I<message/*> or I<multipart/*> will always be attached using
+7bit-encoding, as required by RFC 2045.
 
 =item -
 
@@ -1154,7 +1156,13 @@ Content-ID and Message-ID URLs
 
 Internet Message Format
 
+=item RFC 5322:
+
+Internet Message Format
+
 =for author only: RFC 2646: The text/plain Format parameter
+
+=for author only: RFC 4021: Registration of Mail and MIME Header Fields
 
 =back
 
