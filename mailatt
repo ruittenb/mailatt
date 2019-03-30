@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18.4
+# Version:	1.18.5
 # Created:	2011-02-11
 # Date:		2019-03-29
 # Author:	Rene Uittenbogaard
@@ -32,7 +32,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18.4
+.ds Vw @(#) mailatt 1.18.5
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -137,24 +137,26 @@ f_find_cid_data() {
 # @param {string} filename
 #
 f_mode() {
-	lsout=$(ls -lLd "$1" | awk '{ print $1 }')
-	mode=0
-	[[ "$lsout" == ?r????????* ]] && let mode+=400
-	[[ "$lsout" == ??w???????* ]] && let mode+=200
-	[[ "$lsout" == ???x??????* ]] && let mode+=100
-	[[ "$lsout" == ???s??????* ]] && let mode+=4100
-	[[ "$lsout" == ???S??????* ]] && let mode+=4000
-	[[ "$lsout" == ????r?????* ]] && let mode+=40
-	[[ "$lsout" == ?????w????* ]] && let mode+=20
-	[[ "$lsout" == ??????x???* ]] && let mode+=10
-	[[ "$lsout" == ??????s???* ]] && let mode+=2010
-	[[ "$lsout" == ??????S???* ]] && let mode+=2000
-	[[ "$lsout" == ???????r??* ]] && let mode+=4
-	[[ "$lsout" == ????????w?* ]] && let mode+=2
-	[[ "$lsout" == ?????????x* ]] && let mode+=1
-	[[ "$lsout" == ?????????t* ]] && let mode+=1001
-	[[ "$lsout" == ?????????T* ]] && let mode+=1000
-	echo $mode
+	ls -lLd "$1" | $awk '
+		BEGIN { mode = 0 }
+		$1 ~ /^.r......../ { mode += 400  }
+		$1 ~ /^..w......./ { mode += 200  }
+		$1 ~ /^...x....../ { mode += 100  }
+		$1 ~ /^...s....../ { mode += 4100 }
+		$1 ~ /^...S....../ { mode += 4000 }
+		$1 ~ /^....r...../ { mode += 40   }
+		$1 ~ /^.....w..../ { mode += 20   }
+		$1 ~ /^......x.../ { mode += 10   }
+		$1 ~ /^......s.../ { mode += 2010 }
+		$1 ~ /^......S.../ { mode += 2000 }
+		$1 ~ /^......l.../ { mode += 2000 } # Solaris
+		$1 ~ /^.......r../ { mode += 4    }
+		$1 ~ /^........w./ { mode += 2    }
+		$1 ~ /^.........x/ { mode += 1    }
+		$1 ~ /^.........t/ { mode += 1001 }
+		$1 ~ /^.........T/ { mode += 1000 }
+		END { print mode }
+	'
 }
 
 f_onlcr() {

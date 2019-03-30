@@ -77,21 +77,33 @@ test: $(PROG) ## Run simple tests
 	@./$(PROG) -d -C $(CHARSET) -m -r $(TO) |                       \
 		grep '^To: =?ISO-8859-15?B?UmVjaXBpZW50?= ' >$(NULL) && \
 		echo 'Test  9 succesful (content-transfer-encoding)'
+	@./$(PROG) -d -r $(TO) -q mailatt |                             \
+		grep 'Transfer-Encoding: quoted-printable' >$(NULL) &&  \
+		echo 'Test 10 succesful (content-transfer-encoding)'
+	@./$(PROG) -d -r $(TO) -m mailatt |                             \
+		grep 'Transfer-Encoding: base64' >$(NULL) &&            \
+		echo 'Test 11 succesful (content-transfer-encoding)'
+	@./$(PROG) -d -r $(TO) -u mailatt |                             \
+		grep 'Transfer-Encoding: uuencode' >$(NULL) &&          \
+		echo 'Test 12 succesful (content-transfer-encoding)'
+	@./$(PROG) -d -r $(TO) -u mailatt |                             \
+		grep '^begin 755 mailatt' >$(NULL) &&                   \
+		echo 'Test 13 succesful (uuencode begin line)'
 	@echo | ./$(PROG) -d -i - |                                     \
 		grep '^Content-Disposition: inline' >$(NULL) &&         \
-		echo 'Test 10 succesful (content-disposition)'
+		echo 'Test 14 succesful (content-disposition)'
 	@echo | ./$(PROG) -d - |                                        \
 		grep '^Content-Disposition: attachment' >$(NULL) &&     \
-		echo 'Test 11 succesful (content-disposition)'
+		echo 'Test 15 succesful (content-disposition)'
 	@echo | ./$(PROG) -d -i -M text/html - |                        \
 		grep '^Content-Type: text/html' >$(NULL) &&             \
-		echo 'Test 12 succesful (mime type)'
+		echo 'Test 16 succesful (mime type)'
 	@echo | ./$(PROG) -d -i -M application/x-pdf - |                \
 		grep '^Content-Type: application/x-pdf' >$(NULL) &&     \
-		echo 'Test 13 succesful (mime type)'
+		echo 'Test 17 succesful (mime type)'
 	@echo $(BODY) | ./$(PROG) -d -i - |                             \
 		grep '^'$(BODY) >$(NULL) &&                             \
-		echo 'Test 14 succesful (body)'
+		echo 'Test 18 succesful (body)'
 
 .PHONY: install
 install: $(PROG) ## Copy binary and manpage to system directories
