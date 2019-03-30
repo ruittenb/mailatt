@@ -4,9 +4,9 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.17.1
+# Version:	1.18
 # Created:	2011-02-11
-# Date:		2019-03-25
+# Date:		2019-03-28
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
@@ -16,11 +16,9 @@
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
-#		bug?: line endings in the body should be CRLF; handled by f_onlcr;
-#		      but we can only do that if we encode unix-style line endings.
+#		test: ash (busybox) compatibility
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
-#		feat: internal uuencoder
 #
 
 # The main program code starts at the label '# main'
@@ -34,7 +32,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.17.1
+.ds Vw @(#) mailatt 1.18
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -134,6 +132,31 @@ f_find_cid_data() {
 	cidhost="$(hostname)" 2>/dev/null
 }
 
+#
+# Find the numeric mode for a file
+# @param {string} filename
+#
+f_mode() {
+	lsout=$(ls -lLd "$1" | awk '{ print $1 }')
+	mode=0
+	[[ "$lsout" == ?r????????* ]] && let mode+=400
+	[[ "$lsout" == ??w???????* ]] && let mode+=200
+	[[ "$lsout" == ???x??????* ]] && let mode+=100
+	[[ "$lsout" == ???s??????* ]] && let mode+=4100
+	[[ "$lsout" == ???S??????* ]] && let mode+=4000
+	[[ "$lsout" == ????r?????* ]] && let mode+=40
+	[[ "$lsout" == ?????w????* ]] && let mode+=20
+	[[ "$lsout" == ??????x???* ]] && let mode+=10
+	[[ "$lsout" == ??????s???* ]] && let mode+=2010
+	[[ "$lsout" == ??????S???* ]] && let mode+=2000
+	[[ "$lsout" == ???????r??* ]] && let mode+=4
+	[[ "$lsout" == ????????w?* ]] && let mode+=2
+	[[ "$lsout" == ?????????x* ]] && let mode+=1
+	[[ "$lsout" == ?????????t* ]] && let mode+=1001
+	[[ "$lsout" == ?????????T* ]] && let mode+=1000
+	echo $mode
+}
+
 f_onlcr() {
 	$awk '{
 		sub(/\015$/, "")
@@ -146,7 +169,7 @@ f_encode_header() {
 		f_echo "$1"
 	else
 		indent=
-		f_echon "$1" | f_dissect | f_extend_linelen 330 | $awk 'NF > 1 { print }' | while read header_line;
+		f_echon "$1" | f_dissect | f_adjust_linelen 330 | $awk 'NF > 1 { print }' | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
 			f_echo "${indent}=?${charset}?${header_encoding}?${encoded}?="
@@ -208,7 +231,9 @@ f_add_addresses() {
 	addresses="$to $addressline${addresses:+\\n$addresses}"
 }
 
-# not all systems have mmencode(1); therefore, we'll encode it here
+#
+# Not all systems have mmencode(1); therefore, we'll encode it here
+#
 f_base64encode_bytes() {
 	# Tested on:
 	#	HP-UX 10.20
@@ -221,7 +246,7 @@ f_base64encode_bytes() {
 	$awk -v inheader="$1" '
 		# encode file to base64
 		# remotely based on a script by Peter van Eerten (c) March 6 2003
-		# note: for this implementation, the input line MUST have an exact multiple of 3 no. of bytes
+		# note: the number of bytes on each line MUST be a multiple of 3
 		#
 		function store(n) {
 			buffer[bufindex++] = n
@@ -238,47 +263,93 @@ f_base64encode_bytes() {
 			if (!inheader) printf("\n")
 		}
 		function spout(byte1, byte2, byte3) {
-			result = ""
-			# Create BASE64 values
+			# Create base64 values
 			base1 = int(byte1 / 4)
 			base2 = ((byte1 %  4) * 16) + int(byte2 / 16)
 			base3 = ((byte2 % 16) *  4) + int(byte3 / 64)
 			base4 = (byte3 % 64)
-			# Compose BASE64 string
-			if (bufindex == 2){
-				result = result substr(BASE64, base1 + 1, 1)
-				result = result substr(BASE64, base2 + 1, 1)
-				result = result "=="
-			}
-			if (bufindex == 3){
-				result = result substr(BASE64, base1 + 1, 1)
-				result = result substr(BASE64, base2 + 1, 1)
-				result = result substr(BASE64, base3 + 1, 1)
-				result = result "="
-			}
-			if (bufindex > 3){
-				result = result substr(BASE64, base1 + 1, 1)
-				result = result substr(BASE64, base2 + 1, 1)
-				result = result substr(BASE64, base3 + 1, 1)
-				result = result substr(BASE64, base4 + 1, 1)
-			}
-			printf(result)
+			# Compose string
+			if (bufindex == 2) result = pick(base1) pick(base2) "=="
+			if (bufindex == 3) result = pick(base1) pick(base2) pick(base3) "="
+			if (bufindex  > 3) result = pick(base1) pick(base2) pick(base3) pick(base4)
+			printf("%s", result)
+		}
+		function pick(num) {
+			return substr(set, num + 1, 1)
 		}
 		BEGIN {
-			bufindex   = 1
-			BASE64     = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+			bufindex = 1
+			set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 		}
 		NF > 1 {
 			for (i = 2; i <= NF; i++) store($i)
-#			if (!inheader) printf("\n")
 			flush()
 		}
-#		END {
-#			flush()
-#		}
 	'
 }
 
+#
+# not all systems have uuencode(1); therefore, we'll encode it here
+#
+f_uuencode_bytes() {
+	# Tested on:
+	#	Darwin 17.7.0
+	$awk '
+		# uuencode file
+		# note: the number of bytes on each line MUST be a multiple of 3
+		#
+		function store(n) {
+			buffer[bufindex++] = n
+			if (bufindex > 3) {
+				spout(buffer[1], buffer[2], buffer[3])
+				bufindex = 1
+			}
+		}
+		function flush() {
+			if (bufindex >= 2) {
+				if (bufindex == 2) buffer[2] = 0
+				spout(buffer[1], buffer[2], 0)
+			}
+			printf("\n")
+		}
+		function spout(byte1, byte2, byte3) {
+			# Create base64 values
+			base1 = int(byte1 / 4)
+			base2 = ((byte1 %  4) * 16) + int(byte2 / 16)
+			base3 = ((byte2 % 16) *  4) + int(byte3 / 64)
+			base4 = (byte3 % 64)
+			# Compose string
+			if (bufindex == 2) result = pick(base1) pick(base2) "=="
+			if (bufindex == 3) result = pick(base1) pick(base2) pick(base3) "="
+			if (bufindex  > 3) result = pick(base1) pick(base2) pick(base3) pick(base4)
+			printf("%s", result)
+		}
+		function pick(num) {
+			return substr(cset, num + 1, 1)
+		}
+		function len(num) {
+			return substr(lset, num + 1, 1)
+		}
+		BEGIN {
+			bufindex = 1
+			# here, we need to escape the double quote, the single quote, and the backslash
+			cset = " !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
+			lset = "`!\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
+		}
+		NF > 1 {
+			printf(len(NF - 1))
+			for (i = 2; i <= NF; i++) store($i)
+			flush()
+		}
+	'
+}
+
+#
+# QP-encode the output of the hexdump/octal dump.
+#
+# @param {int} whether we are encoding for the body (0) or header (1)
+# @param {int} whether we want compact (0) or readable, linewise encoding (1)
+#
 f_qpencode_bytes() {
 	# Tested on:
 	#	HP-UX 10.20
@@ -311,18 +382,31 @@ f_qpencode_bytes() {
 }
 
 f_base64encode_file() {
-	f_dissect ${1:+"$1"} | f_extend_linelen 53 | f_base64encode_bytes 0
+	f_dissect ${1:+"$1"} | f_adjust_linelen 53 | f_base64encode_bytes 0
+}
+
+f_uuencode_file() {
+	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
+	f_dissect ${1:+"$1"} | f_adjust_linelen 44 | f_uuencode_bytes 0
+	f_echo "\`\nend"
 }
 
 f_qpencode_file() {
-	f_dissect ${1:+"$1"} | f_extend_linelen 23 | f_qpencode_bytes 0
+	f_dissect ${1:+"$1"} | f_adjust_linelen 23 | f_qpencode_bytes 0
 }
 
 f_qpencode_file_linewise() {
-	f_dissect ${1:+"$1"} | f_extend_linelen 72 | f_qpencode_bytes 0 1
+	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
 }
 
-f_extend_linelen() {
+#
+# Extend the hexdump/octal dump output to contain a certain number of fields
+# per line. This will correspond to the number of characters per line after
+# encoding.
+#
+# @param {int} new number of byte fields per line, not counting the first ('offset') field
+#
+f_adjust_linelen() {
 	$awk -v maxfields="${1:-17}" '
 		BEGIN {
 			# the first field is not accurate any more,
@@ -344,6 +428,18 @@ f_extend_linelen() {
 	'
 }
 
+#
+# Print the contents of the file, byte by byte.
+# The first field on each line is the byte offset, the rest are the actual bytes
+#
+# Example output:
+#
+# 0000000   137  80  78  71  13  10  26  10   0   0   0  13  73  72  68  82
+# 0000020     0   0   0  16   0   0   0  16   8   6   0   0   0  31 243 255
+# 0000040    97   0   0   0   4 103  65  77  65   0   0 177 142 124 251  81
+#
+# @param {string} input filename, or - to read from stdin
+#
 f_dissect() {
 	# some platforms don't have od(1)
 	if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
@@ -362,17 +458,13 @@ f_dissect() {
 
 f_select_encoder() {
 	case "$1" in
-		u)	if f_has uuencode; then
-				bin_encoding=uuencode
-				bin_encoder=uuencode
-				asc_encoding=uuencode
-				asc_encoder=uuencode
-				header_encoding=B
-				header_encoder=f_base64encode_bytes
-			else
-				f_echo "$argv0: Warning: no uuencode found, using base64 instead" 1>&2
-				f_select_encoder m
-			fi
+		u)	
+			bin_encoding=uuencode
+			bin_encoder=f_uuencode_file
+			asc_encoding=uuencode
+			asc_encoder=f_uuencode_file
+			header_encoding=B
+			header_encoder=f_base64encode_bytes
 			;;
 		m)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
@@ -467,21 +559,13 @@ f_composemail() {
 f_binattach() {
 	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	f_echo
-	if [ "$bin_encoding" = uuencode ]; then
-		$bin_encoder "$1" "$2"
-	else
-		$bin_encoder "$1"
-	fi
+	$bin_encoder "$1"
 }
 
 f_ascattach() {
 	f_echo "Content-Transfer-Encoding: $asc_encoding"
 	f_echo
-	if [ "$asc_encoding" = uuencode ]; then
-		$asc_encoder "$1" "$2"
-	else
-		$asc_encoder "$1"
-	fi
+	$asc_encoder "$1"
 }
 
 f_msgattach() {
@@ -845,7 +929,8 @@ for all subsequent attachments and header lines.  This is the default
 if unspecified.
 
 This option is called B<-m> as a reference to mmencode(1). However,
-B<mailatt> does not require any external mmencode(1) program.
+B<mailatt> does not require any external mmencode(1) program; instead,
+it handles the encoding itself.
 
 See also B<-q>.
 
@@ -901,6 +986,9 @@ Specify subject for the e-mail.
 This option may be used multiple times, and in any position on the commandline.
 It indicates that B<uuencode> should be used as Content-Transfer-Encoding
 for all subsequent attachments (header lines will be base64-encoded).
+
+B<mailatt> does not require any external uuencode(1) program; instead, it
+handles the encoding itself.
 
 B<Warning>: not all e-mail clients support this.  The use of this option
 is therefore discouraged; use B<-m> instead.
