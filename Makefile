@@ -1,5 +1,5 @@
 NULL    = /dev/null
-SHEBANG = $(shell which bash 2>$(NULL) || which ksh 2>$(NULL) || which sh 2>$(NULL))
+SHEBANG = $(shell if which bash 1>$(NULL) 2>&1; then echo bash; elif which ksh 1>$(NULL) 2>&1; then echo ksh; else echo false; exit 1; fi)
 PROG    = mailatt
 SECTION = 1
 PODOPTS = --release=' ' --center=' ' --date=`date +%Y-%m-%d` \
@@ -24,7 +24,7 @@ all: bin mandoc ## Fix shebang line in script files; generate manpage (all forma
 
 .PHONY: bin
 bin: $(PROG) ## Fix shebang line in script files
-	sed -i.bak 's,^#!.*,#!$(SHEBANG),' $(PROG)
+	sed -i.bak 's,^#!.*,#!/usr/bin/env $(SHEBANG),' $(PROG)
 
 .PHONY: man
 man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
