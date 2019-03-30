@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18.5
+# Version:	1.18.6
 # Created:	2011-02-11
 # Date:		2019-03-29
 # Author:	Rene Uittenbogaard
@@ -16,7 +16,8 @@
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
-#		test: ash (busybox) compatibility
+#		test: fold lines 'testing a very long subject line to see if
+#		everything works out fine for this type of encoding' | fmt -w80
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
 #
@@ -32,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18.5
+.ds Vw @(#) mailatt 1.18.6
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -244,6 +245,7 @@ f_base64encode_bytes() {
 	#    HP-UX 11.11
 	#    AIX 4.2
 	#    SunOS 5.8
+	#    SunOS 5.11
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
@@ -297,6 +299,7 @@ f_base64encode_bytes() {
 #
 f_uuencode_bytes() {
 	# Tested on:
+	#    SunOS 5.11
 	#    Darwin 17.7.0
 	$awk '
 		# uuencode file
@@ -360,6 +363,7 @@ f_qpencode_bytes() {
 	#    HP-UX 11.11
 	#    AIX 4.2
 	#    SunOS 5.8
+	#    SunOS 5.11
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
@@ -409,7 +413,8 @@ f_qpencode_file_linewise() {
 # per line. This will correspond to the number of characters per line after
 # encoding.
 #
-# @param {int} new number of byte fields per line, not counting the first ('offset') field
+# @param {int} new number of byte fields per line, not counting the first
+# ('offset') field
 #
 f_adjust_linelen() {
 	$awk -v maxfields="${1:-18}" '
@@ -1098,7 +1103,7 @@ B<mailatt> - send e-mail with attachments
 
 S<< C<mailatt [>I< message options >C<|>I< encoding options >C<|>I< header options> >>
 S<< C<|>I< debug options >C<]> >>
-S<< C<[>I< encoding options >C<| -- |>I< file>... C<]> >>
+S<< C<[>I< encoding options >C<| -- |>I< file1 >C<[>I< file2>... C<] ]> >>
 
 C<mailatt { -h | -v }>
 
@@ -1107,10 +1112,6 @@ C<mailatt { -h | -v }>
 =item Message options:
 
 S<<  C<[ -Iai ]>                          >>
-
-=item Debug options:
-
-S<<  C<[ -Vd ]>                           >>
 
 =item Header options:
 
@@ -1127,6 +1128,10 @@ S<<  C<[ -H >I<headerline>C< ]>           >>
 S<<  C<[ -C >I<charset>C< ]>              >>
 S<<  C<[ -M >I<mime-type>C< ]>            >>
 S<<  C<[ -8mqu ]>                         >>
+
+=item Debug options:
+
+S<<  C<[ -Vd ]>                           >>
 
 =back
 
@@ -1373,13 +1378,13 @@ a corresponding MIME type will be selected from a built-in list.
 If the file type is not known or the extension is empty, the file will be
 sent as type I<application/octet-stream>, unless the B<-a> or B<-i>
 option requires it to be included inline.  In that case, the MIME type
-will forcibly be changed to I<text/plain>.
+will be reported as I<text/plain>.
 
 At most one of the filenames may be specified as a single C<-> (minus),
 which will cause B<mailatt> to read a document from stdin. If entered
-interactively, such a document should be ended with the I<eof>-character
-(usually CTRL-D). B<mailatt> will always assume that this document is of
-type I<text/plain>.
+from the terminal, such a document should be ended with the I<eof>-character
+(usually CTRL-D). B<mailatt> will assume that this document is of
+type I<text/plain>, unless indicated otherwise with B<-M>.
 
 =back
 
@@ -1475,15 +1480,13 @@ to be printed on I<stdout> instead of actually being sent.
 
 =head1 BUGS and WARNINGS
 
-If a file is included using input redirection, its MIME type will be inferred
-to be I<text/plain> unless a different type is specified on the command line
-using the B<-M> option.
+This script aims to run out of the box in ksh(1) and bash(1) on a wide variety
+of Un*x-like platforms (such as AIX, HP-UX, SunOS, Solaris, Darwin, FreeBSD
+and Linux (SuSE, Debian, CentOS)), but has not yet been tested on all of them.
 
-RFC 5322 requires the message body to be sent with network style (CR/LF) line
-endings.  This means that ASCII files with Un*x style (LF) line endings need
-to be attached using quoted-printable encoding if you want the line endings to
-be preserved.  For the time being, this means that you will have to specify a
-non-US-ASCII characterset.
+RFC 5322 warns that lines of characters in the body MUST be limited to 998
+characters. If a file of type I<message/*> or I<multipart/*> is attached,
+this is not enforced, since the file is attached as-is.
 
 =head1 SEE ALSO
 

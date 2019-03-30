@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18.5
+.ds Vw @(#) mailatt 1.18.6
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -147,15 +147,12 @@ mailatt \- send e\-mail with attachments
 .ad l
 \&\f(CW\*(C`mailatt\ [\*(C'\fR\fI\ message\ options\ \fR\f(CW\*(C`|\*(C'\fR\fI\ encoding\ options\ \fR\f(CW\*(C`|\*(C'\fR\fI\ header\ options\fR
 \&\f(CW\*(C`|\*(C'\fR\fI\ debug\ options\ \fR\f(CW\*(C`]\*(C'\fR
-\&\f(CW\*(C`[\*(C'\fR\fI\ encoding\ options\ \fR\f(CW\*(C`|\ \-\-\ |\*(C'\fR\fI\ file\fR...\ \f(CW\*(C`]\*(C'\fR
+\&\f(CW\*(C`[\*(C'\fR\fI\ encoding\ options\ \fR\f(CW\*(C`|\ \-\-\ |\*(C'\fR\fI\ file1\ \fR\f(CW\*(C`[\*(C'\fR\fI\ file2\fR...\ \f(CW\*(C`]\ ]\*(C'\fR
 .PP
 \&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
 .IP "Message options:" 4
 .IX Item "Message options:"
 \&\f(CW\*(C`[\ \-Iai\ ]\*(C'\fR
-.IP "Debug options:" 4
-.IX Item "Debug options:"
-\&\f(CW\*(C`[\ \-Vd\ ]\*(C'\fR
 .IP "Header options:" 4
 .IX Item "Header options:"
 \&\f(CW\*(C`[\ \-r\ \*(C'\fR\fIrecipients\fR\f(CW\*(C`\ ]\*(C'\fR
@@ -170,6 +167,9 @@ mailatt \- send e\-mail with attachments
 \&\f(CW\*(C`[\ \-C\ \*(C'\fR\fIcharset\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-M\ \*(C'\fR\fImime-type\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-8mqu\ ]\*(C'\fR
+.IP "Debug options:" 4
+.IX Item "Debug options:"
+\&\f(CW\*(C`[\ \-Vd\ ]\*(C'\fR
 .ad n
 .PP
 Please note that the order of the commandline options is significant.
@@ -374,13 +374,13 @@ a corresponding \s-1MIME\s0 type will be selected from a built-in list.
 If the file type is not known or the extension is empty, the file will be
 sent as type \fIapplication/octet\-stream\fR, unless the \fB\-a\fR or \fB\-i\fR
 option requires it to be included inline.  In that case, the \s-1MIME\s0 type
-will forcibly be changed to \fItext/plain\fR.
+will be reported as \fItext/plain\fR.
 .Sp
 At most one of the filenames may be specified as a single \f(CW\*(C`\-\*(C'\fR (minus),
 which will cause \fBmailatt\fR to read a document from stdin. If entered
-interactively, such a document should be ended with the \fIeof\fR\-character
-(usually CTRL-D). \fBmailatt\fR will always assume that this document is of
-type \fItext/plain\fR.
+from the terminal, such a document should be ended with the \fIeof\fR\-character
+(usually CTRL-D). \fBmailatt\fR will assume that this document is of
+type \fItext/plain\fR, unless indicated otherwise with \fB\-M\fR.
 .SH "EXAMPLES"
 .IX Header "EXAMPLES"
 Send all \fI*.eps\fR files to two recipients:
@@ -487,15 +487,13 @@ For debugging purposes only. If set and not \fB0\fR, causes the composed mail
 to be printed on \fIstdout\fR instead of actually being sent.
 .SH "BUGS and WARNINGS"
 .IX Header "BUGS and WARNINGS"
-If a file is included using input redirection, its \s-1MIME\s0 type will be inferred
-to be \fItext/plain\fR unless a different type is specified on the command line
-using the \fB\-M\fR option.
+This script aims to run out of the box in \fIksh\fR\|(1) and \fIbash\fR\|(1) on a wide variety
+of Un*x\-like platforms (such as \s-1AIX,\s0 HP-UX, SunOS, Solaris, Darwin, FreeBSD
+and Linux (SuSE, Debian, CentOS)), but has not yet been tested on all of them.
 .PP
-\&\s-1RFC 5322\s0 requires the message body to be sent with network style (\s-1CR/LF\s0) line
-endings.  This means that \s-1ASCII\s0 files with Un*x style (\s-1LF\s0) line endings need
-to be attached using quoted-printable encoding if you want the line endings to
-be preserved.  For the time being, this means that you will have to specify a
-non-US-ASCII characterset.
+\&\s-1RFC 5322\s0 warns that lines of characters in the body \s-1MUST\s0 be limited to 998
+characters. If a file of type \fImessage/*\fR or \fImultipart/*\fR is attached,
+this is not enforced, since the file is attached as-is.
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
 \&\fIbase64\fR\|(1), \fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
