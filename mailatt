@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.19.1
+# Version:	1.19.2
 # Created:	2011-02-11
 # Date:		2019-03-31
 # Author:	Rene Uittenbogaard
@@ -19,7 +19,6 @@
 #		test: fold lines 'testing a very long subject line to see if
 #		everything works out fine for this type of encoding' | fmt -w80
 #		feat: implement multipart/related using content-id?
-#		feat: Content-MD5 header?
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +32,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19.1
+.ds Vw @(#) mailatt 1.19.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -49,6 +48,7 @@ f_initialize() {
 	f_findawk
 	f_select_encoder init
 	f_find_cid_data
+	f_find_md5sum
 	#source mime-identify ''
 	attno=0
 	charset=us-ascii
@@ -73,6 +73,16 @@ f_findawk() {
 		awk=nawk
 	else
 		awk=awk
+	fi
+}
+
+f_find_md5sum() {
+	if f_has md5; then
+		md5sum=md5
+	elif f_has md5sum; then
+		md5sum=md5sum
+	else
+		md5sum=
 	fi
 }
 
@@ -560,6 +570,14 @@ f_contentid() {
 	f_echo "$cidtime.$cidrandom.$attno.${fname}@$cidhost" | sed 's/>/_/g'
 }
 
+f_md5sum() {
+	test -z "$md5sum" && return
+	# md5 programs have a tendency to product verbose output.
+	# filter that out and keep just the md5sum itself.
+	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | \
+		f_dissect | f_adjust_linelen 32 | f_base64encode_bytes 1
+}
+
 f_composemail() {
 	f_startmail
 	f_process_all_files "$@"
@@ -568,6 +586,7 @@ f_composemail() {
 
 f_binattach() {
 	f_echo "Content-Transfer-Encoding: $bin_encoding"
+	test -n "${1#-}" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo
 	$bin_encoder "$1"
 }
@@ -1161,10 +1180,17 @@ set has been specified on the commandline.  See the B<-C> option below.
 Binary files (I<i.e.> files having MIME types other than I<text/*>) will
 be attached using base64 encoding by default (but see the B<-q> option below).
 
+If the host system has an md5(1) or md5sum(1) program, a C<Content-MD5>
+header will be added for all binary attachments to ensure data integrity to
+some extent.
+
 =item -
 
 Files of type I<message/*> or I<multipart/*> will always be attached using
 8bit-encoding, because of requirements imposed by RFC 2045.
+
+Attachments of these types will never have any C<Content-MD5> header,
+since RFC 1864 disallows it.
 
 =back
 
@@ -1495,7 +1521,7 @@ this is not enforced, since the file is attached as-is.
 
 =head1 SEE ALSO
 
-base64(1), mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
+mail(1), mailx(1), md5(1), md5sum(1), sendmail(8).
 
 =over 10
 
@@ -1506,6 +1532,10 @@ Format of Internet Text Messages
 =item RFC 1049:
 
 The Content-Type Header Field for Internet Messages
+
+=item RFC 1864:
+
+The Content-MD5 Header Field
 
 =item RFC 2045:
 
@@ -1545,8 +1575,10 @@ Internet Message Format
 
 =begin comment
 
-RFC 1521: MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
-RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 1321: The MD5 Message-Digest Algorithm
+RFC 1544 (obsolete): The Content-MD5 Header Field
+RFC 1521 (obsolete): MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
+RFC 1522 (obsolete): MIME Part Two: Message Header Extensions for Non-ASCII Text
 RFC 2646: The text/plain Format parameter
 RFC 4021: Registration of Mail and MIME Header Fields
 

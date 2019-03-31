@@ -187,6 +187,10 @@ set has been specified on the commandline.  See the \fB\-C\fR option below.
 .IP "\-" 3
 Binary files (\fIi.e.\fR files having \s-1MIME\s0 types other than \fItext/*\fR) will
 be attached using base64 encoding by default (but see the \fB\-q\fR option below).
+.Sp
+If the host system has an \fImd5\fR\|(1) or \fImd5sum\fR\|(1) program, a \f(CW\*(C`Content\-MD5\*(C'\fR
+header will be added for all binary attachments to ensure data integrity to
+some extent.
 .IP "\-" 3
 Files of type \fImessage/*\fR or \fImultipart/*\fR will always be attached using
 8bit\-encoding, because of requirements imposed by \s-1RFC 2045.\s0
@@ -501,13 +505,16 @@ characters. If a file of type \fImessage/*\fR or \fImultipart/*\fR is attached,
 this is not enforced, since the file is attached as-is.
 .SH "SEE ALSO"
 .IX Header "SEE ALSO"
-\&\fIbase64\fR\|(1), \fImail\fR\|(1), \fImailx\fR\|(1), \fImmencode\fR\|(1), \fIsendmail\fR\|(8), \fIuuencode\fR\|(1).
+\&\fImail\fR\|(1), \fImailx\fR\|(1), \fImd5\fR\|(1), \fImd5sum\fR\|(1), \fIsendmail\fR\|(8).
 .IP "\s-1RFC 822:\s0" 10
 .IX Item "RFC 822:"
 Format of Internet Text Messages
 .IP "\s-1RFC 1049:\s0" 10
 .IX Item "RFC 1049:"
 The Content-Type Header Field for Internet Messages
+.IP "\s-1RFC 1864:\s0" 10
+.IX Item "RFC 1864:"
+The Content\-MD5 Header Field
 .IP "\s-1RFC 2045:\s0" 10
 .IX Item "RFC 2045:"
 \&\s-1MIME:\s0 Format of Internet Message Bodies
