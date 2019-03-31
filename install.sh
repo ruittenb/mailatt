@@ -70,7 +70,6 @@ main() {
 	test -d $PREFIX/man/man1 || mkdir -p -m 775 $PREFIX/man/man1
 	echo "installing main script.."
 	install -m 775 -o root -g bin "$1" $PREFIX/bin
-	install -m 775 -o root -g bin "$2" $PREFIX/bin
 	install -l "$1" $PREFIX/bin/$progname
 	echo "installing user manpage.."
 	install -m 664 -o root -g "$mangroup" $progname.1 $PREFIX/man/man1
@@ -86,5 +85,5 @@ main() {
 	fi
 }
 
-main $(basename $(pwd)) mime-identify
+main $(basename $(pwd))
 

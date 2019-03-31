@@ -1,22 +1,23 @@
-#!/usr/local/bin/bash
-#!/bin/ksh
+#!/usr/bin/env ksh
 #
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.18
+# Version:	1.19
 # Created:	2011-02-11
-# Date:		2019-03-28
+# Date:		2019-03-30
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]
-#			[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]
-#			[ -H <headerline> ] [ -d ] [ -Iai ] [ -8mqu ]
-#			[ -C <charset> ] [ -M mimetype ] [ <file1> .. <filen> ]
+# Usage:	mailatt [ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]
+#			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
+#			[ -s <subject> ] [ -H <headerline> ]
+#			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
+#			[ <file1> .. <filen> ]
 #		mailatt { -h | -v }
 #
 # TODO:		test: unfolded header lines
-#		test: ash (busybox) compatibility
+#		test: fold lines 'testing a very long subject line to see if
+#		everything works out fine for this type of encoding' | fmt -w80
 #		feat: implement multipart/related using content-id?
 #		feat: Content-MD5 header?
 #
@@ -32,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.18
+.ds Vw @(#) mailatt 1.19
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -48,7 +49,7 @@ f_initialize() {
 	f_findawk
 	f_select_encoder init
 	f_find_cid_data
-	source mime-identify ''
+	#source mime-identify ''
 	attno=0
 	charset=us-ascii
 	mixed_or_alternative=mixed
@@ -84,11 +85,11 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0 [ -r <recipient> ] [ -c <cc-addr> ] [ -b <bcc-addr> ]"
-	f_echo "\t\t[ -f <from> ] [ -R <reply-to> ] [ -s <subject> ]"
-	f_echo "\t\t[ -H <headerline> ] [ -8Iadimqu ]"
+	f_echo "Usage: $argv0\t[ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
+	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
-	f_echo "       $argv0 { -h | -v }"
+	f_echo "       $argv0\t{ -h | -v }"
 }
 
 f_version() {
@@ -137,24 +138,26 @@ f_find_cid_data() {
 # @param {string} filename
 #
 f_mode() {
-	lsout=$(ls -lLd "$1" | awk '{ print $1 }')
-	mode=0
-	[[ "$lsout" == ?r????????* ]] && let mode+=400
-	[[ "$lsout" == ??w???????* ]] && let mode+=200
-	[[ "$lsout" == ???x??????* ]] && let mode+=100
-	[[ "$lsout" == ???s??????* ]] && let mode+=4100
-	[[ "$lsout" == ???S??????* ]] && let mode+=4000
-	[[ "$lsout" == ????r?????* ]] && let mode+=40
-	[[ "$lsout" == ?????w????* ]] && let mode+=20
-	[[ "$lsout" == ??????x???* ]] && let mode+=10
-	[[ "$lsout" == ??????s???* ]] && let mode+=2010
-	[[ "$lsout" == ??????S???* ]] && let mode+=2000
-	[[ "$lsout" == ???????r??* ]] && let mode+=4
-	[[ "$lsout" == ????????w?* ]] && let mode+=2
-	[[ "$lsout" == ?????????x* ]] && let mode+=1
-	[[ "$lsout" == ?????????t* ]] && let mode+=1001
-	[[ "$lsout" == ?????????T* ]] && let mode+=1000
-	echo $mode
+	ls -lLd "$1" | $awk '
+		BEGIN { mode = 0 }
+		$1 ~ /^.r......../ { mode += 400  }
+		$1 ~ /^..w......./ { mode += 200  }
+		$1 ~ /^...x....../ { mode += 100  }
+		$1 ~ /^...s....../ { mode += 4100 }
+		$1 ~ /^...S....../ { mode += 4000 }
+		$1 ~ /^....r...../ { mode += 40   }
+		$1 ~ /^.....w..../ { mode += 20   }
+		$1 ~ /^......x.../ { mode += 10   }
+		$1 ~ /^......s.../ { mode += 2010 }
+		$1 ~ /^......S.../ { mode += 2000 }
+		$1 ~ /^......l.../ { mode += 2000 } # Solaris
+		$1 ~ /^.......r../ { mode += 4    }
+		$1 ~ /^........w./ { mode += 2    }
+		$1 ~ /^.........x/ { mode += 1    }
+		$1 ~ /^.........t/ { mode += 1001 }
+		$1 ~ /^.........T/ { mode += 1000 }
+		END { print mode }
+	'
 }
 
 f_onlcr() {
@@ -180,11 +183,11 @@ f_encode_header() {
 
 f_add_address() {
 	# allowed values for $addr:
-	#	user
-	#	<user>
-	#	<user@domain>
-	#	name <user>
-	#	name <user@domain>
+	#    user
+	#    <user>
+	#    <user@domain>
+	#    name <user>
+	#    name <user@domain>
 	# test whether $addr is of the form user <user@dom>
 	if [ "${addr##*<}" != "$addr" ]; then
 		# split into 'name' and 'user[@domain]' parts
@@ -234,15 +237,18 @@ f_add_addresses() {
 #
 # Not all systems have mmencode(1); therefore, we'll encode it here
 #
+# @param {int} whether we are encoding a mime part (0) or header field (1)
+#
 f_base64encode_bytes() {
 	# Tested on:
-	#	HP-UX 10.20
-	#	HP-UX 11.11
-	#	AIX 4.2
-	#	SunOS 5.8
-	#	SuSE UnitedLinux 1.0
-	#	Debian 3.0
-	#	Darwin 17.7.0
+	#    HP-UX 10.20
+	#    HP-UX 11.11
+	#    AIX 4.2
+	#    SunOS 5.8
+	#    SunOS 5.11
+	#    SuSE UnitedLinux 1.0
+	#    Debian 3.0
+	#    Darwin 17.7.0
 	$awk -v inheader="$1" '
 		# encode file to base64
 		# remotely based on a script by Peter van Eerten (c) March 6 2003
@@ -293,7 +299,8 @@ f_base64encode_bytes() {
 #
 f_uuencode_bytes() {
 	# Tested on:
-	#	Darwin 17.7.0
+	#    SunOS 5.11
+	#    Darwin 17.7.0
 	$awk '
 		# uuencode file
 		# note: the number of bytes on each line MUST be a multiple of 3
@@ -347,32 +354,32 @@ f_uuencode_bytes() {
 #
 # QP-encode the output of the hexdump/octal dump.
 #
-# @param {int} whether we are encoding for the body (0) or header (1)
+# @param {int} whether we are encoding a mime part (0) or header field (1)
 # @param {int} whether we want compact (0) or readable, linewise encoding (1)
 #
 f_qpencode_bytes() {
 	# Tested on:
-	#	HP-UX 10.20
-	#	HP-UX 11.11
-	#	AIX 4.2
-	#	SunOS 5.8
-	#	SuSE UnitedLinux 1.0
-	#	Debian 3.0
-	#	Darwin 17.7.0
+	#    HP-UX 10.20
+	#    HP-UX 11.11
+	#    AIX 4.2
+	#    SunOS 5.8
+	#    SunOS 5.11
+	#    SuSE UnitedLinux 1.0
+	#    Debian 3.0
+	#    Darwin 17.7.0
 	$awk -v inheader="$1" -v linewise="$2" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
 			for (i = 2; i <= NF; i++) {
-				# 61 is the equals sign
-				# 46 is the full stop, causes errors at start of line
+				# test if normal ascii, but not full stop (46)
+				# (causes errors at start of line) or equals sign (61)
 				#
-				if (($i > 32) && ($i != 46) \
-					&& ($i != 61) && ($i < 127))	printf("%c", $i)
-				else if (($i == 32) && (!inheader) \
-					&& (i > 2) && (i < NF))		printf(" ")
-				else if (($i == 10) && (!inheader) \
-					&& linewise)			printf("=0A=\n")
-				else					printf("=%02X", $i)
+				if (($i > 32) && ($i != 46) && ($i != 61) && ($i < 127))   printf("%c", $i)
+				# space
+				else if (($i == 32) && (!inheader) && (i > 2) && (i < NF)) printf(" ")
+				# newline
+				else if (($i == 10) && (!inheader) && linewise)            printf("=0A=\n")
+				else                                                       printf("=%02X", $i)
 			}
 		}
 		END {
@@ -382,12 +389,14 @@ f_qpencode_bytes() {
 }
 
 f_base64encode_file() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 53 | f_base64encode_bytes 0
+	# number of fields MUST be a multiple of 3
+	f_dissect ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
 }
 
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
-	f_dissect ${1:+"$1"} | f_adjust_linelen 44 | f_uuencode_bytes 0
+	# number of fields MUST be a multiple of 3
+	f_dissect ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0
 	f_echo "\`\nend"
 }
 
@@ -404,11 +413,13 @@ f_qpencode_file_linewise() {
 # per line. This will correspond to the number of characters per line after
 # encoding.
 #
-# @param {int} new number of byte fields per line, not counting the first ('offset') field
+# @param {int} new number of byte fields per line, not counting the first
+# ('offset') field
 #
 f_adjust_linelen() {
-	$awk -v maxfields="${1:-17}" '
+	$awk -v maxfields="${1:-18}" '
 		BEGIN {
+			r = 0
 			# the first field is not accurate any more,
 			# but it is discarded by f_*encode_line anyway
 			printf("0000000")
@@ -416,7 +427,7 @@ f_adjust_linelen() {
 		{
 			for (i = 2; i <= NF; i++) {
 				printf(" %3d", $i)
-				if (++r > maxfields) {
+				if (++r >= maxfields) {
 					r = 0
 					printf("\n%s", "0000000")
 				}
@@ -458,8 +469,7 @@ f_dissect() {
 
 f_select_encoder() {
 	case "$1" in
-		u)	
-			bin_encoding=uuencode
+		u)	bin_encoding=uuencode
 			bin_encoder=f_uuencode_file
 			asc_encoding=uuencode
 			asc_encoder=f_uuencode_file
@@ -539,7 +549,7 @@ f_endmail() {
 }
 
 f_sendmail() {
-	f_onlcr | if [ "${MAILATT_DEBUG#0}" ]; then
+	f_onlcr | if [ -n "${MAILATT_DEBUG#0}" ]; then
 		cat
 	else
 		sendmail -t -i $envelope_from
@@ -581,13 +591,14 @@ f_msgattach() {
 
 f_attachit() {
 	let attno=attno+1
-	if [ "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
+	if [ -n "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
 		namespec="; name=\"$neatname\""
 		fnamespec="; name=\"$neatname\""
 	else
 		namespec=
 		fnamespec=
 	fi
+	test -n "$verbose" && f_echo "Attaching $fname..." >&2
 	f_echo "--$boundary"
 	f_echo "Content-ID: <$(f_contentid "$fname")>"
 	f_echo "Content-Disposition: $inline_or_attachment$fnamespec"
@@ -636,9 +647,9 @@ f_attachment() { # {a|b} mimetype
 
 f_process_all_files() {
 	for opt in "$@"; do
-		# process options, if any might follow
+		# process options, if the end of the options has not been flagged
 		if [ -z "${end_opts#0}" ]; then
-			if [ "$charset_coming_up" ]; then
+			if [ -n "$charset_coming_up" ]; then
 				charset="$opt"
 				charset_coming_up=
 				continue
@@ -648,7 +659,7 @@ f_process_all_files() {
 					charset_coming_up=1
 				fi
 				continue
-			elif [ "$mimetype_coming_up" ]; then
+			elif [ -n "$mimetype_coming_up" ]; then
 				mimetype="$opt"
 				mimetype_coming_up=
 				continue
@@ -686,7 +697,7 @@ f_process_one_file() {
 	if [ "${mimetype%%/*}" == text ]; then
 		f_attachment a "$mimetype"
 		return
-	elif [ "$mimetype" ]; then
+	elif [ -n "$mimetype" ]; then
 		f_attachment b "$mimetype"
 		return
 	fi
@@ -698,15 +709,332 @@ f_process_one_file() {
 }
 
 ############################################################################
+# mime lookup table
+
+f_mime_identify() {
+	filename="$1"
+	case "$(echo ${filename##*.} | tr A-Z a-z)" in
+		1m)		echo a text/nroff				;;
+		3gp)		echo b video/3gpp				;;
+		3i)		echo a application/x-intercal			;;
+		3pm)		echo a text/nroff				;;
+		7z)		echo b application/x-7z-compressed		;;
+		[1-8])		echo a text/nroff				;;
+		a)		echo b application/x-unix-archive		;;
+		a[0-9][0-9])	echo b application/arj				;;
+		ac)		echo a text/x-autoconf				;;
+		ai)		echo b application/postscript			;;
+		aif)		echo b audio/x-aiff				;;
+		aifc)		echo b audio/x-aiff				;;
+		aiff)		echo b audio/x-aiff				;;
+		am)		echo a text/x-autoconf				;;
+		apk)		echo b application/vnd.android.package-archive	;;
+		ar)		echo b application/x-unix-archive		;;
+		arc)		echo b application/x-arc			;;
+		arj)		echo b application/arj				;;
+		asf)		echo b video/x-ms-asf				;;
+		asr)		echo b video/x-ms-asf				;;
+		asx)		echo b video/x-ms-asf				;;
+		au)		echo b audio/basic				;;
+		avi)		echo b video/x-msvideo				;;
+		awk)		echo a text/x-awk				;;
+		bas)		echo a text/x-bas				;;
+		bash)		echo a text/x-bash				;;
+		bat)		echo a text/x-msdos-batch			;;
+		bf)		echo a application/x-befunge			;;
+		bin)		echo b application/octet-stream			;;
+		bmp)		echo b image/bmp				;;
+		bz)		echo b application/x-bzip			;;
+		bz2)		echo b application/x-bzip2			;;
+		c)		echo a text/x-c					;;
+		c++)		echo a text/x-c++				;;
+		cab)		echo b application/x-cab-compressed		;;
+		cc)		echo a text/x-c++				;;
+		cer) 		echo a application/x-x509-ca-cert		;;
+		class)		echo b application/octet-stream			;;
+		cmd)		echo a text/x-msdos-batch			;;
+		com)		echo b application/octet-stream			;;
+		cpio)		echo b application/x-cpio			;;
+		cpp)		echo a text/x-c++				;;
+		crt) 		echo a application/x-x509-ca-cert		;;
+		cs)		echo a text/x-csharp				;;
+		csh)		echo a text/x-csh				;;
+		css)		echo a text/css					;;
+		deb)		echo b application/x-deb			;;
+		der) 		echo a application/x-x509-ca-cert		;;
+		dia)		echo b application/x-dia-diagram		;;
+		dll)		echo b application/octet-stream			;;
+		doc)		echo b application/msword			;;
+		docx)		echo b application/msword			;;
+		dot)		echo b application/msword			;;
+		dvi)		echo b application/x-dvi			;;
+		elm)		echo a application/x-elm			;;
+		eml)		echo a message/rfc822				;;
+		eot)		echo b application/vnd.ms-fontobject		;;
+		eps)		echo b application/postscript			;;
+		epub)		echo b application/epub+zip			;;
+		exe)		echo b application/octet-stream			;;
+		f)		echo a text/x-fortran				;;
+		f4v)		echo b video/x-f4v				;;
+		f77)		echo a text/x-fortran				;;
+		f90)		echo a text/x-fortran				;;
+		f95)		echo a text/x-fortran				;;
+		flac)		echo b video/x-flac				;;
+		flc)		echo b video/x-flac				;;
+		fli)		echo b video/x-fli				;;
+		flv)		echo b video/x-flv				;;
+		for)		echo a text/x-fortran				;;
+		gif)		echo b image/gif				;;
+		gz)		echo b application/x-gzip			;;
+		h)		echo a text/x-c					;;
+		hh)		echo a text/plain				;;
+		hlp)		echo b application/x-winhelp			;;
+		hqx)		echo b application/mac-binhex40			;;
+		htm)		echo a text/html				;;
+		html)		echo a text/html				;;
+		i)		echo a application/x-intercal			;;
+		ico)		echo b image/x-icon				;;
+		iges)		echo b model/ige				;;
+		igs)		echo b model/ige				;;
+		in)		echo a text/x-autoconf				;;
+		ini)		echo a text/plain				;;
+		jar)		echo b application/java-archive			;;
+		java)		echo a text/x-java				;;
+		jfif)		echo b image/jpeg				;;
+		jpe)		echo b image/jpeg				;;
+		jpeg)		echo b image/jpeg				;;
+		jpg)		echo b image/jpeg				;;
+		jpm)		echo b image/jpm				;;
+		js)		echo a application/javascript			;;
+		json)		echo a application/json				;;
+		ksh)		echo a text/x-ksh				;;
+		latex)		echo a application/x-latex			;;
+		lha)		echo b application/x-lzh-compressed		;;
+		log)		echo a text/plain				;;
+		lsp)		echo a application/x-lisp			;;
+		lzh)		echo b application/x-lzh-compressed		;;
+		m1v)		echo b video/mpeg				;;
+		m2a)		echo b audio/mpeg				;;
+		m2v)		echo b video/mpeg				;;
+		m3a)		echo b audio/mpeg				;;
+		m3u)		echo b audio/x-mpegurl				;;
+		m3u8)		echo b application/vnd.apple.mpegurl		;;
+		m4a)		echo b audio/mp4				;;
+		m4v)		echo b video/x-m4v				;;
+		man)		echo a text/troff				;;
+		md)		echo a text/markdown				;;
+		mdb)		echo b application/x-msaccess			;;
+		me)		echo a text/troff				;;
+		mesh)		echo b model/mesh				;;
+		mht)		echo a message/rfc822				;;
+		mhtm)		echo a message/rfc822				;;
+		mhtml)		echo a message/rfc822				;;
+		mid)		echo b audio/midi				;;
+		midi)		echo b audio/midi				;;
+		mjs)		echo a application/javascript			;;
+		mk3d)		echo b video/x-matroska				;;
+		mka)		echo b audio/x-matroska				;;
+		mks)		echo b video/x-matroska				;;
+		mkv)		echo b video/x-matroska				;;
+		mm)		echo a text/troff				;;
+		mng)		echo b video/x-mng				;;
+		mov)		echo b video/quicktime				;;
+		movie)		echo b video/x-sgi-movie			;;
+		mp2)		echo b video/mpeg				;;
+		mp2a)		echo b audio/mpeg				;;
+		mp3)		echo b audio/mpeg				;;
+		mp4)		echo b video/mp4				;;
+		mp4a)		echo b audio/mp4				;;
+		mp4v)		echo b video/mp4				;;
+		mpa)		echo b video/mpeg				;;
+		mpc)		echo b application/x-project			;;
+		mpe)		echo b video/mpeg				;;
+		mpeg)		echo b video/mpeg				;;
+		mpg)		echo b video/mpeg				;;
+		mpg4)		echo b video/mp4				;;
+		mpga)		echo b audio/mpeg				;;
+		mpkg)		echo b application/vnd.apple.installer+xml	;;
+		mpp)		echo b application/vnd.ms-project		;;
+		ms)		echo a text/troff				;;
+		msh)		echo b model/mesh				;;
+		news)		echo a message/rfc822				;;
+		nl)		echo a text/plain				;;
+		nws)		echo a message/rfc822				;;
+		odp)		echo b application/x-openoffice			;;
+		ods)		echo b application/x-openoffice			;;
+		odt)		echo b application/x-openoffice			;;
+		oga)		echo b audio/ogg				;;
+		ogg)		echo b application/ogg				;;
+		ogm)		echo b application/ogg				;;
+		ogv)		echo b video/ogg				;;
+		ogx)		echo b application/ogg				;;
+		p)		echo a application/x-chem			;;
+		p10)		echo b application/pkcs10			;;
+		p12)		echo b application/pkcs12			;;
+		p7b)		echo b application/pkcs7-certificates		;;
+		p7c)		echo b application/pkcs7-mime			;;
+		p7m)		echo b application/pkcs7-mime			;;
+		p7r)		echo b application/pkcs7-certreqresp		;;
+		p7s)		echo b application/pkcs7-signature		;;
+		pas)		echo a text/x-pascal				;;
+		pbm)		echo b image/x-portable-bitmap			;;
+		pct)		echo b image/pict				;;
+		pcx)		echo b image/x-pcx				;;
+		pdb)		echo a chemical/x-pdb				;;
+		pdf)		echo b application/pdf				;;
+		pem) 		echo a application/x-pem-file			;;
+		pfx)		echo b application/pkcs12			;;
+		pgm)		echo b image/x-portable-graymap			;;
+		php)		echo a text/x-php				;;
+		phtml)		echo a text/x-php				;;
+		pic)		echo b image/pict				;;
+		pict)		echo b image/pict				;;
+		pkg)		echo b application/x-pkg			;;
+		pl)		echo a text/x-perl				;;
+		planner)	echo b application/x-planner			;;
+		pm)		echo a text/x-perl-module			;;
+		png)		echo b image/png				;;
+		pnm)		echo b image/x-portable-anymap			;;
+		pot)		echo b application/vnd.ms-powerpoint		;;
+		pov)		echo a model/x-pov				;;
+		ppm)		echo b image/x-portable-pixmap			;;
+		pps)		echo b application/vnd.ms-powerpoint		;;
+		ppt)		echo b application/vnd.ms-powerpoint		;;
+		pptx)		echo b application/vnd.ms-powerpoint		;;
+		ps)		echo b application/postscript			;;
+		py)		echo a text/x-python				;;
+		qt)		echo b video/quicktime				;;
+		r[0-9][0-9])	echo b application/x-rar-compressed		;;
+		ra)		echo b audio/x-realaudio			;;
+		ram)		echo b audio/x-pn-realaudio			;;
+		rar)		echo b application/x-rar-compressed		;;
+		rm)		echo b audio/x-pn-realaudio			;;
+		rmi)		echo b audio/midi				;;
+		roff)		echo a text/troff				;;
+		rpm)		echo b application/x-rpm			;;
+		#rpm)		echo b audio/x-pn-realaudio			;; # duplicate
+		rss)		echo b application/rss+xml			;;
+		rtf)		echo b application/rtf				;;
+		rtx)		echo a text/richtext				;;
+		sass)		echo a text/x-sass				;;
+		scm)		echo a application/x-scheme			;;
+		scss)		echo a text/x-scss				;;
+		sgm)		echo a text/sgml				;;
+		sgml)		echo a text/sgml				;;
+		sh)		echo a text/x-sh				;;
+		shar)		echo a application/x-shar			;;
+		shtml)		echo a text/html				;;
+		silo)		echo b model/mesh				;;
+		sit)		echo b application/x-stuffit			;;
+		sl)		echo b application/octet-stream			;;
+		smi)		echo b application/smil				;;
+		smil)		echo b application/smil				;;
+		smv)		echo b video/x-smv				;;
+		snd)		echo b audio/basic				;;
+		so)		echo b application/octet-stream			;;
+		spc)		echo b application/pkcs7-certificates		;;
+		spl)		echo b application/x-futuresplash		;;
+		sql)		echo a text/x-sql				;;
+		srp)		echo b application/x-rationalplan		;;
+		ss)		echo a application/x-scheme			;;
+		stm)		echo a text/html				;;
+		sty)		echo a text/x-tex-style				;;
+		svg)		echo b image/svg+xml				;;
+		svgz)		echo b image/svg+xml				;;
+		swf)		echo b application/x-shockwave-flash		;;
+		t)		echo a text/troff				;;
+		tar)		echo b application/x-tar			;;
+		taz)		echo b application/x-tar-compress		;;
+		tbz2)		echo b application/x-tar-bzip2			;;
+		tcsh)		echo a text/x-tcsh				;;
+		tex)		echo a application/x-tex			;;
+		texi)		echo a application/x-texinfo			;;
+		texinfo)	echo a application/x-texinfo			;;
+		tga)		echo b image/x-targa				;;
+		tgz)		echo b application/x-tar-gzip			;;
+		tif)		echo b image/tiff				;;
+		tiff)		echo b image/tiff				;;
+		torrent)	echo b application/x-bittorrent			;;
+		tpl)		echo a text/plain				;;
+		tpu)		echo b application/x-tpu			;;
+		tr)		echo a text/troff				;;
+		ts)		echo b video/mp2t				;;
+		#ts)		echo a application/x-typescript			;; # duplicate
+		tsx)		echo a application/x-typescript			;;
+		ttf)		echo a font/ttf					;;
+		txt)		echo a text/plain				;;
+		txz)		echo b application/x-tar-xz			;;
+		tz)		echo b application/x-tar-compress		;;
+		uml)		echo b application/x-uml			;;
+		uu)		echo a text/x-uuencode				;;
+		uue)		echo a text/x-uuencode				;;
+		vba)		echo a text/x-vimball				;;
+		vcf)		echo a text/x-vcard				;;
+		vcs)		echo a text/x-vcalendar				;;
+		vim)		echo a text/x-vim				;;
+		viv)		echo b video/vnd.vivo				;;
+		vivo)		echo b video/vnd.vivo				;;
+		vob)		echo b video/x-ms-vob				;;
+		voc)		echo b audio/x-voc				;;
+		vrml)		echo b model/vrml				;;
+		wav)		echo b audio/x-wav				;;
+		wcm)		echo b application/vnd.ms-works			;;
+		wdb)		echo b application/vnd.ms-works			;;
+		webm)		echo b video/webm				;;
+		webp)		echo b image/webp				;;
+		wks)		echo b application/vnd.ms-works			;;
+		wm)		echo b video/x-ms-wm				;;
+		wmv)		echo b video/x-winmedia				;;
+		wmx)		echo b video/x-ms-wmx				;;
+		woff)		echo b font/woff				;;
+		woff2)		echo b font/woff2				;;
+		wp)		echo b application/wordperfect			;;
+		wp5)		echo b application/wordperfect			;;
+		wp6)		echo b application/wordperfect			;;
+		wps)		echo b application/vnd.ms-works			;;
+		wri)		echo b application/msword			;;
+		wrl)		echo b model/vrml				;;
+		wvx)		echo b video/x-ms-wvx				;;
+		xbm)		echo b image/x-xbitmap				;;
+		xcf)		echo b image/x-gimp				;;
+		xhtml)		echo a application/xhtml+xml			;;
+		xif)		echo b image/vnd.xiff				;;
+		xla|xlc|xld)	echo b application/vnd.ms-excel			;;
+		xlk|xll|xlm)	echo b application/vnd.ms-excel			;;
+		xlsx)		echo b application/vnd.ms-excel			;;
+		xls|xlt|xlv)	echo b application/vnd.ms-excel			;;
+		xlw)		echo b application/vnd.ms-excel			;;
+		xml)		echo a application/xml				;;
+		xpm)		echo b image/x-xpixmap				;;
+		xwd)		echo b image/x-xwindowdump			;;
+		xyz)		echo a chemical/x-xyz				;;
+		xz)		echo b application/x-xz				;;
+		yenc)		echo b application/x-yenc-encoded		;;
+		yml)		echo a application/x-yaml			;;
+		ync)		echo b application/x-yencoded			;;
+		yuv)		echo b video/x-oggyuv				;;
+		z)		echo b application/x-compress			;;
+		zip)		echo b application/zip				;;
+		zoo)		echo b application/x-zoo			;;
+		zsh)		echo a text/x-zsh				;;
+		# individual files
+		makefile)	echo a text/x-makefile				;;
+		dockerfile)	echo a text/x-dockerfile			;;
+		vagrantfile)	echo a text/x-vagrantfile			;;
+		*)		echo b default					;;
+	esac
+}
+
+############################################################################
 # main
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
+while getopts "8C:H:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
-		H)	if [ "$headerlines" ]; then
+		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
 			else
 				headerlines="$OPTARG"
@@ -716,6 +1044,8 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 			specify_inline_filename=1
 			;;
 		M)	mimetype="$OPTARG"
+			;;
+		V)	verbose=1
 			;;
 		a)	inline_or_attachment=inline
 			specify_inline_filename=
@@ -738,8 +1068,8 @@ while getopts "8C:H:IM:R:ab:c:df:himqr:s:uv" currentopt; do
 		v)	f_version
 			exit 0
 			;;
-		*)	f_echo "$argv0: Invalid option: $currentopt" 1>&2
-			f_usage
+		*)	# 'getopts' already gives a message on stderr
+			f_usage 1>&2
 			exit 1
 			;;
 	esac
@@ -768,23 +1098,47 @@ B<mailatt> - send e-mail with attachments
 
 =head1 SYNOPSIS
 
-C<mailatt>
-S<<	C<[ -r >I<recipients>C< ]>		>>
-S<<	C<[ -c >I<cc-addresses>C< ]>		>>
-S<<	C<[ -b >I<bcc-addresses>C< ]>		>>
-S<<	C<[ -f >I<from>C< ]>			>>
-S<<	C<[ -R >I<reply-to-addresses>C< ]>	>>
-S<<	C<[ -s >I<subject>C< ]>			>>
-S<<	C<[ -H >I<headerline>C< ]>		>>
-S<<	C<[ -8Iadimqu ]>			>>
-S<<	C<[ -C >I<charset>C< ]>			>>
-S<<	C<[ -M >I<mime-type>C< ]>		>>
-S<<	C<[ >I<file1 .. filen>C< ]>		>>
+=for roff
+.ad l
+
+S<< C<mailatt [>I< message options >C<|>I< encoding options >C<|>I< header options> >>
+S<< C<|>I< debug options >C<]> >>
+S<< C<[>I< encoding options >C<| -- |>I< file1 >C<[>I< file2>... C<] ]> >>
 
 C<mailatt { -h | -v }>
 
+=over 4
+
+=item Message options:
+
+S<<  C<[ -Iai ]>                          >>
+
+=item Header options:
+
+S<<  C<[ -r >I<recipients>C< ]>           >>
+S<<  C<[ -c >I<cc-addresses>C< ]>         >>
+S<<  C<[ -b >I<bcc-addresses>C< ]>        >>
+S<<  C<[ -f >I<from>C< ]>                 >>
+S<<  C<[ -R >I<reply-to-addresses>C< ]>   >>
+S<<  C<[ -s >I<subject>C< ]>              >>
+S<<  C<[ -H >I<headerline>C< ]>           >>
+
+=item Encoding options:
+
+S<<  C<[ -C >I<charset>C< ]>              >>
+S<<  C<[ -M >I<mime-type>C< ]>            >>
+S<<  C<[ -8mqu ]>                         >>
+
+=item Debug options:
+
+S<<  C<[ -Vd ]>                           >>
+
+=back
+
+=for roff
+.ad n
+
 Please note that the order of the commandline options is significant.
-See especially B<-8CMmqu>.
 
 =head1 DESCRIPTION
 
@@ -795,33 +1149,41 @@ of any format.
 
 =item -
 
-Plaintext files are supposed to be clean 7-bit ASCII unless another character
+Files of type I<text/*> and those that are known to be ASCII-only (like many
+script types) will be attached using quoted-printable encoding by default
+(but see the B<-m> option below).
+
+These files are supposed to be clean 7-bit ASCII unless another character
 set has been specified on the commandline.  See the B<-C> option below.
 
 =item -
 
-Files of type I<text/*> and those that are known to be ASCII-only will be
-attached using quoted-printable encoding by default (but see the B<-m> and B<-q>
-options below).
+Binary files (I<i.e.> files having MIME types other than I<text/*>) will
+be attached using base64 encoding by default (but see the B<-q> option below).
 
 =item -
 
 Files of type I<message/*> or I<multipart/*> will always be attached using
-8bit-encoding, as required by RFC 2045.
-
-=item -
-
-Binary files (I<i.e.> files having MIME types other than I<text/*>) will
-be attached using base64 encoding by default (but see the B<-m> and B<-q>
-options below).
+8bit-encoding, because of requirements imposed by RFC 2045.
 
 =back
 
-B<mailatt> can send messages in two possible formats.  I<multipart/mixed>
-is used to send a collection of files which are not necessarily related.
-I<multipart/alternative> is used to provide alternative representations
-of the same message (I<e.g.> plain text and HTML), in which case the mail
-client can select one to present.  See also the B<-a> option below.
+B<mailatt> can send messages in two possible formats:
+
+=over 4
+
+=item I<multipart/mixed>
+
+This is the default.  It signifies that the message contains a collection
+of files which are not necessarily related.
+
+=item I<multipart/alternative>
+
+This message type can be used to provide alternative representations of the
+same file (I<e.g.> plain text and HTML), in which case the mail client
+can select one to present.  See also the B<-a> option below.
+
+=back
 
 =head1 OPTIONS
 
@@ -873,14 +1235,17 @@ is therefore discouraged; use B<-i> instead.
 
 =item -M I<mime-type>
 
-Specifies the MIME type to be used for the following file. If not
-specified, the MIME type is inferred from the filename extension.
-
-The encoding is determined from the MIME type.
+Specifies the MIME type to be used for the next file on the commandline.
+If not specified, the MIME type is inferred from the filename extension.
 
 =item -R I<addr1>[,I<addr2...>]
 
 Specify Reply-To: addresses for the e-mail. See B<-r> for allowed formats.
+
+=item -V
+
+For debugging purposes only.  The name of each file will be reported on
+I<stderr> when it is attached.
 
 =item -a
 
@@ -999,6 +1364,11 @@ See also B<-m> and B<-q>.
 
 Display version information and exit.
 
+=item --
+
+Indicates that no more options follow; all the remaining commandline
+arguments are to be interpreted as filenames.
+
 =item I<file1> [ I<file2>... ]
 
 Indicate which files should be attached to the mail.  Depending on the
@@ -1008,13 +1378,13 @@ a corresponding MIME type will be selected from a built-in list.
 If the file type is not known or the extension is empty, the file will be
 sent as type I<application/octet-stream>, unless the B<-a> or B<-i>
 option requires it to be included inline.  In that case, the MIME type
-will forcibly be changed to I<text/plain>.
+will be reported as I<text/plain>.
 
 At most one of the filenames may be specified as a single C<-> (minus),
 which will cause B<mailatt> to read a document from stdin. If entered
-interactively, such a document should be ended with the I<eof>-character
-(usually CTRL-D). B<mailatt> will always assume that this document is of
-type I<text/plain>.
+from the terminal, such a document should be ended with the I<eof>-character
+(usually CTRL-D). B<mailatt> will assume that this document is of
+type I<text/plain>, unless indicated otherwise with B<-M>.
 
 =back
 
@@ -1068,7 +1438,7 @@ Add a Sender: line to the mail header:
 
   mailatt -r all@company.com -s 'Important announcement' -i
           -H 'Sender: secretary@company.com' -f ceo@company.com
-	  message.html
+          message.html
 
 Send a mail with mixed character sets:
 
@@ -1110,15 +1480,13 @@ to be printed on I<stdout> instead of actually being sent.
 
 =head1 BUGS and WARNINGS
 
-If a file is included using input redirection, its MIME type will be inferred
-to be I<text/plain> unless a different type is specified on the command line
-using the B<-M> option.
+This script aims to run out of the box in ksh(1) and bash(1) on a wide variety
+of Un*x-like platforms (such as AIX, HP-UX, SunOS, Solaris, Darwin, FreeBSD
+and Linux (SuSE, Debian, CentOS)), but has not yet been tested on all of them.
 
-RFC 5322 requires the message body to be sent with network style (CR/LF) line
-endings.  This means that ASCII files with Un*x style (LF) line endings need
-to be attached using quoted-printable encoding if you want the line endings to
-be preserved.  For the time being, this means that you will have to specify a
-non-US-ASCII characterset.
+RFC 5322 warns that lines of characters in the body MUST be limited to 998
+characters. If a file of type I<message/*> or I<multipart/*> is attached,
+this is not enforced, since the file is attached as-is.
 
 =head1 SEE ALSO
 
@@ -1170,20 +1538,19 @@ The Base16, Base32, and Base64 Data Encodings
 
 Internet Message Format
 
-=for author only: RFC 1521: MIME Part One: Mechanisms for Specifying and Describing
-the Format of Internet Message Bodies
+=begin comment
 
-=for author only: RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 1521: MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
+RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 2646: The text/plain Format parameter
+RFC 4021: Registration of Mail and MIME Header Fields
 
-=for author only: RFC 2646: The text/plain Format parameter
+Character sets:
+https://www.iana.org/assignments/character-sets/character-sets.xhtml
+http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
+https://www.ibm.com/support/knowledgecenter/en/SSVRGU_10.0.1/basic/LSAZ_APPENDIX_E_MIME_CHARSET_NAMES.html
 
-=for author only: RFC 4021: Registration of Mail and MIME Header Fields
-
-=for author only: Character sets: https://www.iana.org/assignments/character-sets/character-sets.xhtml
-
-=for author only: Character sets: http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
-
-=for author only: Character sets: https://www.ibm.com/support/knowledgecenter/en/SSVRGU_10.0.1/basic/LSAZ_APPENDIX_E_MIME_CHARSET_NAMES.html
+=end comment
 
 =back
 
