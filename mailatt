@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.19.2
+# Version:	1.19.3
 # Created:	2011-02-11
 # Date:		2019-03-31
 # Author:	Rene Uittenbogaard
@@ -32,7 +32,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19.2
+.ds Vw @(#) mailatt 1.19.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -245,7 +245,10 @@ f_add_addresses() {
 }
 
 #
-# Not all systems have mmencode(1); therefore, we'll encode it here
+# Not all systems have mmencode(1) or base64(1); therefore, we'll encode it here.
+# Note: the number of bytes on each line MUST be a multiple of 3
+#
+# This was remotely based on a script by Peter van Eerten (c) March 6 2003
 #
 # @param {int} whether we are encoding a mime part (0) or header field (1)
 #
@@ -260,10 +263,6 @@ f_base64encode_bytes() {
 	#    Debian 3.0
 	#    Darwin 17.7.0
 	$awk -v inheader="$1" '
-		# encode file to base64
-		# remotely based on a script by Peter van Eerten (c) March 6 2003
-		# note: the number of bytes on each line MUST be a multiple of 3
-		#
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -305,16 +304,14 @@ f_base64encode_bytes() {
 }
 
 #
-# not all systems have uuencode(1); therefore, we'll encode it here
+# Not all systems have uuencode(1); therefore, we'll encode it here
+# Note: the number of bytes on each line MUST be a multiple of 3
 #
 f_uuencode_bytes() {
 	# Tested on:
 	#    SunOS 5.11
 	#    Darwin 17.7.0
 	$awk '
-		# uuencode file
-		# note: the number of bytes on each line MUST be a multiple of 3
-		#
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -575,7 +572,7 @@ f_md5sum() {
 	# md5 programs have a tendency to product verbose output.
 	# filter that out and keep just the md5sum itself.
 	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | \
-		f_dissect | f_adjust_linelen 32 | f_base64encode_bytes 1
+		f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
 }
 
 f_composemail() {
@@ -585,13 +582,14 @@ f_composemail() {
 }
 
 f_binattach() {
-	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	test -n "${1#-}" && f_echo "Content-MD5: $(f_md5sum $1)"
+	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	f_echo
 	$bin_encoder "$1"
 }
 
 f_ascattach() {
+	test -n "${1#-}" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo "Content-Transfer-Encoding: $asc_encoding"
 	f_echo
 	$asc_encoder "$1"
@@ -1429,7 +1427,7 @@ Send a formatted file, preceded by an introductory message, typed
 interactively:
 
   mailatt -s manual -r beatrix@drakensteyn.nl -i - sendmail.pdf
-  Good morning Your Majesty,
+  Good morning Your Royal Highness,
   Attached you will find the sendmail manual I promised.
   ^D
 
