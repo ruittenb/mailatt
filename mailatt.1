@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19
+.ds Vw @(#) mailatt 1.19.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -272,7 +272,7 @@ Specify Cc: addresses for the e\-mail. See \fB\-r\fR for allowed formats.
 .IP "\-d" 4
 .IX Item "-d"
 For debugging purposes only. The composed mail will be printed on \fIstdout\fR
-instead of actually being sent. This option takes precedence over the
+instead of actually being sent. This option is overruled by the
 \&\s-1MAILATT_DEBUG\s0 variable (see below).
 .IP "\-f \fIaddr1\fR" 4
 .IX Item "-f addr1"
@@ -383,26 +383,26 @@ from the terminal, such a document should be ended with the \fIeof\fR\-character
 type \fItext/plain\fR, unless indicated otherwise with \fB\-M\fR.
 .SH "EXAMPLES"
 .IX Header "EXAMPLES"
-Send all \fI*.eps\fR files to two recipients:
+Send two \fI*.pdf\fR files to two recipients (local users):
 .PP
-.Vb 1
-\&  mailatt \-s\*(AqFilesystem usage\*(Aq \-r alexander,maxima fsgraph\-*.eps
+.Vb 2
+\&  mailatt \-s \*(AqRevised speeches\*(Aq \-r alexander,maxima
+\&          throne\-speech.pdf christmas\-speech.pdf
 .Ve
 .PP
-Send a file fragment, carbon copy to the sysadmin (possibly forwarded by
-a \fI.forward\fR file):
+Send a file fragment, carbon copy to the sysadmin:
 .PP
 .Vb 1
-\&  mailatt \-s\*(AqFragment 2/10\*(Aq \-r beatrix \-c root dumps.tar.gz.xab
+\&  mailatt \-s\*(AqFragment 2/10\*(Aq \-r admin \-c bofh dumps.tar.gz.xab
 .Ve
 .PP
 Send a formatted file, preceded by an introductory message, typed
 interactively:
 .PP
 .Vb 4
-\&  mailatt \-s\*(AqSendmail manual\*(Aq \-r sysadmin@domain.nl \-i \- sendmail.pdf
-\&  Hello Bernhard,
-\&  Here is the sendmail manual I promised.
+\&  mailatt \-s manual \-r beatrix@drakensteyn.nl \-i \- sendmail.pdf
+\&  Good morning Your Majesty,
+\&  Attached you will find the sendmail manual I promised.
 \&  ^D
 .Ve
 .PP
@@ -413,10 +413,10 @@ Send a formatted mail in \s-1HTML\s0 format, specifying a From: address:
 \&          \-i birthdaycard.html
 .Ve
 .PP
-Send a mail in both plain text and \s-1HTML\s0 format:
+Send a message in both plain text and \s-1HTML\s0 format:
 .PP
 .Vb 1
-\&  mailatt \-a \-r constantijn,friso \-s greeting.txt greeting.html
+\&  mailatt \-a \-r constantijn,friso \-s \*(AqGreetings!\*(Aq msg.txt msg.html
 .Ve
 .PP
 Attach a file of unknown \s-1MIME\s0 type using quoted-printable encoding (\fIe.g.\fR
@@ -483,13 +483,18 @@ Specify the \s-1MIME\s0 type of an attachment fed via stdin:
 .IX Header "ENVIRONMENT"
 .IP "\s-1MAILATT_DEBUG\s0" 4
 .IX Item "MAILATT_DEBUG"
-For debugging purposes only. If set and not \fB0\fR, causes the composed mail
-to be printed on \fIstdout\fR instead of actually being sent.
+For debugging purposes only.  If set and not \fB0\fR, this causes the
+composed mail to be printed on \fIstdout\fR instead of actually being
+sent.  This behavior is identical to adding the \fB\-d\fR option.
+.Sp
+Setting this variable to \fB0\fR disables the debugging behavior. This takes
+precedence over adding \fB\-d\fR.
 .SH "BUGS and WARNINGS"
 .IX Header "BUGS and WARNINGS"
-This script aims to run out of the box in \fIksh\fR\|(1) and \fIbash\fR\|(1) on a wide variety
-of Un*x\-like platforms (such as \s-1AIX,\s0 HP-UX, SunOS, Solaris, Darwin, FreeBSD
-and Linux (SuSE, Debian, CentOS)), but has not yet been tested on all of them.
+This script aims to run out of the box in \fIksh\fR\|(1) and \fIbash\fR\|(1) on a wide
+variety of Un*x\-like platforms (such as \s-1AIX,\s0 HP-UX, SunOS, Solaris, Darwin,
+FreeBSD and Linux (SuSE, Debian, CentOS)), but has not yet been tested on
+all of them.
 .PP
 \&\s-1RFC 5322\s0 warns that lines of characters in the body \s-1MUST\s0 be limited to 998
 characters. If a file of type \fImessage/*\fR or \fImultipart/*\fR is attached,
