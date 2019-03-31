@@ -3,12 +3,12 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.19.3
+# Version:	1.19.4
 # Created:	2011-02-11
-# Date:		2019-03-31
+# Date:		2019-04-01
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]
+# Usage:	mailatt [ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
 #			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
 #			[ -s <subject> ] [ -H <headerline> ]
 #			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
@@ -18,6 +18,7 @@
 # TODO:		test: unfolded header lines
 #		test: fold lines 'testing a very long subject line to see if
 #		everything works out fine for this type of encoding' | fmt -w80
+#			f_hanging_indent ?
 #		feat: implement multipart/related using content-id?
 #
 
@@ -32,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19.3
+.ds Vw @(#) mailatt 1.19.4
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -95,7 +96,7 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0\t[ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "Usage: $argv0\t[ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
 	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
 	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
@@ -582,14 +583,14 @@ f_composemail() {
 }
 
 f_binattach() {
-	test -n "${1#-}" && f_echo "Content-MD5: $(f_md5sum $1)"
+	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	f_echo
 	$bin_encoder "$1"
 }
 
 f_ascattach() {
-	test -n "${1#-}" && f_echo "Content-MD5: $(f_md5sum $1)"
+	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo "Content-Transfer-Encoding: $asc_encoding"
 	f_echo
 	$asc_encoder "$1"
@@ -1047,9 +1048,11 @@ f_mime_identify() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:H:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
+while getopts "8C:DH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
+			;;
+		D)	md5sum=
 			;;
 		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
@@ -1148,7 +1151,7 @@ S<<  C<[ -8mqu ]>                         >>
 
 =item Debug options:
 
-S<<  C<[ -Vd ]>                           >>
+S<<  C<[ -DVd ]>                          >>
 
 =back
 
@@ -1159,8 +1162,27 @@ Please note that the order of the commandline options is significant.
 
 =head1 DESCRIPTION
 
-B<mailatt> is used to send multipart MIME e-mail with file attachments
-of any format.
+B<mailatt> is used to send multipart MIME e-mail messages with file attachments.
+
+The message can be composed in either of two possible formats:
+
+=over 4
+
+=item I<multipart/mixed>
+
+This is the default.  It signifies that the message contains a collection
+of files which are not necessarily related.
+
+=item I<multipart/alternative>
+
+This message type can be used to provide alternative representations of the
+same file (I<e.g.> plain text and HTML), in which case the mail client
+can select one to present.  See also the B<-a> option below.
+
+=back
+
+Files can be of any MIME type and can be attached using several encoding
+types:
 
 =over 3
 
@@ -1178,36 +1200,18 @@ set has been specified on the commandline.  See the B<-C> option below.
 Binary files (I<i.e.> files having MIME types other than I<text/*>) will
 be attached using base64 encoding by default (but see the B<-q> option below).
 
-If the host system has an md5(1) or md5sum(1) program, a C<Content-MD5>
-header will be added for all binary attachments to ensure data integrity to
-some extent.
-
 =item -
 
 Files of type I<message/*> or I<multipart/*> will always be attached using
 8bit-encoding, because of requirements imposed by RFC 2045.
 
-Attachments of these types will never have any C<Content-MD5> header,
-since RFC 1864 disallows it.
-
 =back
 
-B<mailatt> can send messages in two possible formats:
-
-=over 4
-
-=item I<multipart/mixed>
-
-This is the default.  It signifies that the message contains a collection
-of files which are not necessarily related.
-
-=item I<multipart/alternative>
-
-This message type can be used to provide alternative representations of the
-same file (I<e.g.> plain text and HTML), in which case the mail client
-can select one to present.  See also the B<-a> option below.
-
-=back
+If the host system has an md5(1) or md5sum(1) program, a C<Content-MD5>
+header will be added for all ascii and binary attachments to ensure data
+integrity to some extent.  Attachments of types I<message/*> or
+I<multipart/*> will never have any C<Content-MD5> header, since RFC 1864
+disallows it.  See also the B<-D> option.
 
 =head1 OPTIONS
 
@@ -1241,6 +1245,12 @@ Some often used character sets:
     ISO-8859-3   EUC-JP        Big5           Windows-1256
     ISO-8859-4   EUC-KR        Windows-874    Windows-1257
     ISO-8859-5   EUC-CN        Windows-1250   Windows-1258
+
+=item -D
+
+Suppress sending a C<Content-MD5> header line. This prevents mail
+clients from checking the file checksums, which may be useful in case
+problems are encountered.
 
 =item -H I<headerline>
 
