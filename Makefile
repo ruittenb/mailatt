@@ -17,13 +17,13 @@ CHARSET = ISO-8859-15
 # Automatic self-documentation
 .PHONY: help
 help: ## Display this help
-	@awk 'BEGIN { FS = ":.*## "; tab = 12; color = "\033[36m"; indent = "  "; printf "\nUsage:\n  make " color "<target>\033[0m\n\nRecognized targets:\n" } /^[a-zA-Z0-9%_-]+:.*?## / { pad = sprintf("\n%" tab "s" indent, "", $$2); gsub(/\\n/, pad); printf indent color "%-" tab "s\033[0m%s\n", $$1, $$2 } /^##@ / { gsub(/\\n/, "\n"); printf "\n%s\n", substr($$0, 5) } END { print "" }' $(MAKEFILE_LIST) # v1.43
+	@awk 'BEGIN { FS = ":.*## "; tab = 16; color = "\033[36m"; indent = "  "; printf "\nUsage:\n  make " color "<target>\033[0m\n\nRecognized targets:\n" } /^[a-zA-Z0-9%_-]+:.*?## / { pad = sprintf("\n%" tab "s" indent, "", $$2); gsub(/\\n/, pad); printf indent color "%-" tab "s\033[0m%s\n", $$1, $$2 } /^##@ / { gsub(/\\n/, "\n"); printf "\n%s\n", substr($$0, 5) } END { print "" }' $(MAKEFILE_LIST) # v1.43
 
 .PHONY: all
-all: bin mandoc ## Fix shebang line in script files; generate manpage (all formats)
+all: shebang mandoc ## Fix shebang line in script file; generate manpage (all formats)
 
-.PHONY: bin
-bin: $(PROG) ## Fix shebang line in script files
+.PHONY: shebang
+shebang: $(PROG) ## Fix shebang line in script file
 	sed -i.bak 's,^#!.*,#!/usr/bin/env $(SHEBANG),' $(PROG)
 
 .PHONY: man
@@ -106,8 +106,24 @@ test: $(PROG) ## Run simple tests
 		echo 'Test 18 succesful (body)'
 
 .PHONY: install
-install: $(PROG) ## Copy binary and manpage to system directories
+install: $(PROG) ## Copy script and manpage to system directories
 	./install.sh
+
+.PHONY: bump-patchlevel
+bump-patchlevel: ## increment the script version by 0.0.1
+	perl -i.bak -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+\.\d+)\.?(\d*)} \
+			  {$$1 . "." . ($$2 + 1)}e' $(PROG)
+	@echo New version: `./mailatt -v`
+
+.PHONY: dump-minor
+bump-minor: ## increment the script version by 0.1
+	perl -i.bak -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+)\.(\d+)\.?\d*} \
+			  {$$1 . "." . ($$2 + 1)}e' $(PROG)
+	@echo New version: `./mailatt -v`
+
+.PHONY: tag
+tag: ## create a tag that corresponds to the script version number
+	git tag v$$(awk '/^# Version/{ print $$3 }' mailatt)
 
 .PHONY: clean
 clean: ## Remove the manpages

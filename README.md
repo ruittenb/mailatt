@@ -10,13 +10,13 @@ sensible defaults.  There is support for HTML mail and non-ASCII character sets.
 The first (shebang) line may need fixing:
 
 ```
-make bin
+make shebang
 ```
 
 ## Example:
 
 ```
-mailatt −s 'Filesystem usage' −r sysadmin@domain.nl -i message.html fsgraph−*.eps
+mailatt -i −s 'Filesystem usage' −r sysadmin@domain.nl message.html fsgraph−*.eps
 ```
 
 ## Installing:
