@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.21.1
+# Version:	1.21.2
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -33,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.21.1
+.ds Vw @(#) mailatt 1.21.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -194,22 +194,24 @@ f_onlcr() {
 	}'
 }
 
+f_hanging_indent() {
+	$awk '
+		NR == 1 { print }
+		NR >  1 { print "\t" $0 }
+	'
+}
+
 f_encode_header() {
 	line="$1"
 	if [ "$(f_lowercase $charset)" = us-ascii ]; then
-		f_echo "$line" | fmt -w 70 | $awk '
-			NR == 1 { print }
-			NR >  1 { print "\t" $0 }
-		'
+		f_echo "$line" | fmt -w 70
 	else
-		indent=
 		f_echon "$line" | f_dissect | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
-			f_echo "${indent}=?${charset}?${header_encoding}?${encoded}?="
-			indent='\t'
+			f_echo "=?${charset}?${header_encoding}?${encoded}?="
 		done
-	fi
+	fi | f_hanging_indent
 }
 
 f_add_address() {
