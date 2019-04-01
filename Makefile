@@ -1,7 +1,8 @@
 NULL    = /dev/null
-SHEBANG = $(shell if which bash 1>$(NULL) 2>&1; then echo bash; elif which ksh 1>$(NULL) 2>&1; then echo ksh; else echo false; exit 1; fi)
+SHEBANG = $(shell if which bash 1>$(NULL) 2>&1; then echo bash; elif which ksh 1>$(NULL) 2>&1; then echo ksh; else echo sh; fi)
 PROG    = mailatt
 SECTION = 1
+BAK     =
 PODOPTS = --release=' ' --center=' ' --date=`date +%Y-%m-%d` \
 	  --section=$(SECTION) --name=$(PROG)
 
@@ -17,7 +18,7 @@ all: shebang mandoc ## Fix shebang line in script file; generate manpage (all fo
 
 .PHONY: shebang
 shebang: $(PROG) ## Fix shebang line in script file
-	sed -i.bak 's,^#!.*,#!/usr/bin/env $(SHEBANG),' $(PROG)
+	sed -i "$(BAK)" 's,^#!.*,#!/usr/bin/env $(SHEBANG),' $(PROG)
 
 .PHONY: man
 man: $(PROG).$(SECTION) ## Generate manpage (nroff format)
@@ -48,13 +49,13 @@ install: $(PROG) ## Copy script and manpage to system directories
 
 .PHONY: bump-patchlevel
 bump-patchlevel: ## increment the script version by 0.0.1
-	perl -i.bak -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+\.\d+)\.?(\d*)} \
+	perl -i"$(BAK)" -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+\.\d+)\.?(\d*)} \
 			  {$$1 . "." . ($$2 + 1)}e' $(PROG)
 	@echo New version: `./mailatt -v`
 
 .PHONY: dump-minor
 bump-minor: ## increment the script version by 0.1
-	perl -i.bak -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+)\.(\d+)\.?\d*} \
+	perl -i"$(BAK)" -pe 's{^((?:# Version:\s+|\.ds Vw @.#. mailatt )\d+)\.(\d+)\.?\d*} \
 			  {$$1 . "." . ($$2 + 1)}e' $(PROG)
 	@echo New version: `./mailatt -v`
 
@@ -68,5 +69,5 @@ clean: ## Remove the manpages
 
 .PHONY: distclean
 distclean: clean ## Cleanup and prepare for distribution
-	rm -f config.* $(PROG).bak
+	rm -f config.* $(PROG)$(BAK)
 
