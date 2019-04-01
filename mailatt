@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.21.2
+# Version:	1.21.3
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -19,7 +19,7 @@
 #		feat: implement multipart/related using content-id?
 #		bug: darwin user database may contain non-ascii characters
 #		examine: RFC 3676: The Text/Plain Format and DelSp Parameters
-#		test: wrapping address header lines
+#		feat: send inline us-ascii as 7-bit?
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.21.2
+.ds Vw @(#) mailatt 1.21.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -236,7 +236,7 @@ f_add_address() {
 	if [ "${addr#*@}" = "$addr" -a -z "$fullname" ]; then
 		fullname="$(f_getusername "$addr")"
 	fi
-	addressline="${addressline:+$addressline, }${fullname:+$(f_encode_header "$fullname") }<$addr>"
+	addressline="${addressline:+$addressline,\n\t}${fullname:+$(f_encode_header "$fullname") }<$addr>"
 }
 
 f_add_addresses() {
