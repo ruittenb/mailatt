@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.21
+# Version:	1.22
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -15,12 +15,11 @@
 #			[ <file1> .. <filen> ]
 #		mailatt { -h | -v }
 #
-# TODO:		test: unfolded header lines
-#		test: fold lines 'testing a very long subject line to see if
-#			everything works out fine for this type of encoding' | fmt -w80
-#			f_hanging_indent ?
+# TODO:
 #		feat: implement multipart/related using content-id?
 #		bug: darwin user database may contain non-ascii characters
+#		examine: RFC 3676: The Text/Plain Format and DelSp Parameters
+#		feat: send inline us-ascii as 7-bit?
 #
 
 # The main program code starts at the label '# main'
@@ -34,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.21
+.ds Vw @(#) mailatt 1.22
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -195,18 +194,24 @@ f_onlcr() {
 	}'
 }
 
+f_hanging_indent() {
+	$awk '
+		NR == 1 { print }
+		NR >  1 { print "\t" $0 }
+	'
+}
+
 f_encode_header() {
+	line="$1"
 	if [ "$(f_lowercase $charset)" = us-ascii ]; then
-		f_echo "$1"
+		f_echo "$line" | fmt -w 70
 	else
-		indent=
-		f_echon "$1" | f_dissect | f_adjust_linelen 330 | $awk 'NF > 1 { print }' | while read header_line;
+		f_echon "$line" | f_dissect | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
-			f_echo "${indent}=?${charset}?${header_encoding}?${encoded}?="
-			indent='\t'
+			f_echo "=?${charset}?${header_encoding}?${encoded}?="
 		done
-	fi
+	fi | f_hanging_indent
 }
 
 f_add_address() {
@@ -231,7 +236,7 @@ f_add_address() {
 	if [ "${addr#*@}" = "$addr" -a -z "$fullname" ]; then
 		fullname="$(f_getusername "$addr")"
 	fi
-	addressline="${addressline:+$addressline, }${fullname:+$(f_encode_header "$fullname") }<$addr>"
+	addressline="${addressline:+$addressline,\n\t}${fullname:+$(f_encode_header "$fullname") }<$addr>"
 }
 
 f_add_addresses() {
@@ -526,8 +531,8 @@ f_select_encoder() {
 			bin_encoder=f_base64encode_file
 			asc_encoding=quoted-printable
 			asc_encoder=f_qpencode_file_linewise
-			header_encoding=B
-			header_encoder=f_base64encode_bytes
+			header_encoding=Q
+			header_encoder=f_qpencode_bytes
 			;;
 		*)	bin_encoding=binary
 			bin_encoder=cat
@@ -1617,10 +1622,15 @@ Internet Message Format
 =begin comment
 
 RFC 1321: The MD5 Message-Digest Algorithm
+RFC 1341 (obsolete): MIME (Multipurpose Internet Mail Extensions):
+                     Mechanisms for Specifying and Describing the Format of Internet Message Bodies
 RFC 1544 (obsolete): The Content-MD5 Header Field
 RFC 1521 (obsolete): MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
 RFC 1522 (obsolete): MIME Part Two: Message Header Extensions for Non-ASCII Text
-RFC 2646: The text/plain Format parameter
+RFC 2184 (obsolete): MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
+RFC 2231: MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
+RFC 2646 (obsolete): The Text/Plain Format Parameter
+RFC 3676: The Text/Plain Format and DelSp Parameters
 RFC 4021: Registration of Mail and MIME Header Fields
 
 Character sets:
