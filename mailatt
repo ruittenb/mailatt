@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.20
+# Version:	1.20.1
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -17,9 +17,10 @@
 #
 # TODO:		test: unfolded header lines
 #		test: fold lines 'testing a very long subject line to see if
-#		everything works out fine for this type of encoding' | fmt -w80
+#			everything works out fine for this type of encoding' | fmt -w80
 #			f_hanging_indent ?
 #		feat: implement multipart/related using content-id?
+#		bug: darwin user database may contain non-ascii characters
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.20
+.ds Vw @(#) mailatt 1.20.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -108,15 +109,31 @@ f_version() {
 }
 
 f_getusername() {
+	login="$1"
 	# find name from password file (GCOS field) or NIS
 	{
 		# Is NIS active? Then give it preference over local passwd
 		if f_has domainname && test "`domainname 2>/dev/null`"; then
-			ypmatch "$1" passwd 2>/dev/null
+			ypmatch "$login" passwd 2>/dev/null
 		fi
 		# Always consult local passwd
 		cat /etc/passwd
-	} | $awk -F: '$1 == "'"$1"'" { sub(/,.*/, "", $5); print $5 }'
+		# MacOS/Darwin user database
+		if [ `uname` == Darwin ]; then
+			dscl . -read /Users/"$login" RealName | $awk -v login="$login" '
+			!/^RealName:/ {
+				sub(/^[ \t]*/, "")
+				realname = $0
+			}
+			END {
+				print login ":*:-1:-1:" realname ":/tmp:/usr/bin/false"
+			}'
+		fi
+	} | $awk -F: -v login="$login" '
+		$1 == login {
+			sub(/,.*/, "", $5); print $5
+		}
+	' | head -1
 }
 
 f_notify_interactive() {
