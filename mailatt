@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.23.2
+# Version:	1.23.3
 # Created:	2011-02-11
 # Date:		2019-04-06
 # Author:	Rene Uittenbogaard
@@ -35,7 +35,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.23.2
+.ds Vw @(#) mailatt 1.23.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -241,11 +241,11 @@ f_hanging_indent() {
 }
 
 f_encode_header() {
-	line="$1"
+	typeset line="$1"
 	if [ "$(f_lowercase $charset)" = us-ascii ]; then
 		f_echo "$line" | fmt -w 70
 	else
-		f_echon "$line" | f_dissect | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
+		f_echon "$line" | f_bytedump | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
 			f_echo "=?${charset}?${header_encoding}?${encoded}?="
@@ -424,7 +424,11 @@ f_uuencode_bytes() {
 # QP-encode the output of the hexdump/octal dump.
 #
 # @param {int} whether we are encoding a mime part (0) or header field (1)
-# @param {int} whether we want compact (0) or readable, linewise encoding (1)
+# @param {int} how linefeeds (chr(10)) should be encoded:
+#		0:  \n      for most legible representation of text files
+#		1:  =0A=\n  for byte-true encoding of text files
+#		2:  =0A     for byte-true encoding of binaries
+# Note that right before sending, all line endings will be converted to \r\n
 #
 f_qpencode_bytes() {
 	# Tested on:
@@ -436,18 +440,21 @@ f_qpencode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v inheader="$1" -v linewise="$2" '
+	$awk -v inheader="$1" -v linefeed="$2" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
 			for (i = 2; i <= NF; i++) {
-				# test if normal ascii, but not full stop (46)
-				# (causes errors at start of line) or equals sign (61)
-				#
-				if (($i > 32) && ($i != 46) && ($i != 61) && ($i < 127))   printf("%c", $i)
-				# space
+				# normal ascii, but not space or equals sign (61)
+				if (($i > 32) && ($i != 61) && ($i < 127))                 printf("%c", $i)
+				# space, if not in header and not the first or last char on line
 				else if (($i == 32) && (!inheader) && (i > 2) && (i < NF)) printf(" ")
-				# newline
-				else if (($i == 10) && (!inheader) && linewise)            printf("=0A=\n")
+				# if newline, then insert a repesentational line break
+				else if (($i == 10) && (!inheader)) {
+					if (linefeed == 2)                                 printf("=0A")
+					else if (linefeed == 1)                            printf("=0A=\n")
+					# if linefeed == 0 the END block will print a NL
+				}
+				# all other characters: simple qpencoding
 				else                                                       printf("=%02X", $i)
 			}
 		}
@@ -459,26 +466,29 @@ f_qpencode_bytes() {
 
 f_base64encode_file() {
 	# number of fields MUST be a multiple of 3
-	f_dissect ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
 }
 
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
 	# number of fields MUST be a multiple of 3
-	f_dissect ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0 0
 	f_echo "\`\nend"
 }
 
-f_qpencode_file() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 23 | f_qpencode_bytes 0
+f_qpencode_file_binary() {
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 26 | f_qpencode_bytes 0 2
+}
+
+f_qpencode_file_text() {
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
 }
 
 f_qpencode_file_linewise() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
-}
-
-f_qpencode_file_charwise() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0
+	typeset line
+	cat ${1:+"$1"} | while read line; do
+		echo "$line" | f_bytedump | f_adjust_linelen 800 | f_qpencode_bytes 0 0
+	done
 }
 
 #
@@ -524,7 +534,7 @@ f_adjust_linelen() {
 #
 # @param {string} input filename, or empty to read from stdin
 #
-f_dissect() {
+f_bytedump() {
 	fname="$1"
 	# some platforms don't have od(1)
 	if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
@@ -551,9 +561,9 @@ f_select_encoder() {
 			header_encoder=f_base64encode_bytes
 			;;
 		q)	bin_encoding=quoted-printable
-			bin_encoder=f_qpencode_file
+			bin_encoder=f_qpencode_file_binary
 			asc_encoding=quoted-printable
-			asc_encoder=f_qpencode_file_linewise
+			asc_encoder=f_qpencode_file_text
 			header_encoding=Q
 			header_encoder=f_qpencode_bytes
 			;;
@@ -567,7 +577,7 @@ f_select_encoder() {
 		init)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
 			asc_encoding=quoted-printable
-			asc_encoder=f_qpencode_file_linewise
+			asc_encoder=f_qpencode_file_text
 			header_encoding=Q
 			header_encoder=f_qpencode_bytes
 			;;
@@ -634,7 +644,7 @@ f_md5sum() {
 				printhexbyte(substr($0, i, 2));
 			}
 		}
-	' | f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
+	' | f_bytedump | f_adjust_linelen 33 | f_base64encode_bytes 1
 }
 
 f_composemail() {
@@ -658,7 +668,7 @@ f_ascattach() {
 	#
 	if [ -n "$flowed" ]; then
 		f_echon "Content-Transfer-Encoding: 7bit\n\n"
-		f_qpencode_file_charwise "$fname" # line endings (CR/LF) will be corrected later
+		f_qpencode_file_linewise "$fname" # line endings (CR/LF) will be corrected later
 	else
 		test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
 		f_echon "Content-Transfer-Encoding: $asc_encoding\n\n"

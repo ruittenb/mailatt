@@ -18,9 +18,12 @@ SUBJECT3='and the best wishes for your birthday'
 SUBJECT_ISO='Réseau Besançon € 12'
 SUBJECT2_ISO="Ce breuvage sucré est rafraîchissant et plein de goût. Parfait à déguster lors de chaudes journées d'été."
 HEADER='X-Testing: testing'
-BODY='Message body'
-BODY2q='=F3=CC=C1=D7=D8=D3=D1'
-BODY2m=A2iDOxdLV28
+BODY_ASC='Message body'
+BODY_ASC_QP='Message body'
+BODY_RUS_QP='^=F3=CC=C1=D7=D8=D3=D1'
+BODY_RUS_MM=A2iDOxdLV28
+BODY_PNG_MM=^iVBORw0KGgo
+BODY_PNG_QP=^=89PNG=0D=0A=1A=0A=
 CHARSET=ISO-8859-15
 CHARSET2=KOI8-R
 
@@ -297,7 +300,7 @@ run_attachment_tests() {
 
 	run_test 'charset is reported correctly for file attachment in ascii charset' \
 		'^Content-Type: text/plain; charset="us-ascii"' \
-		< <(echo "$BODY" | $PROG -d -i -)
+		< <(echo "$BODY_ASC" | $PROG -d -i -)
 	run_test 'charset is reported correctly for file attachment in iso charset' \
 		'^Content-Type: text/plain; charset="'$CHARSET'"' \
 		< <($PROG -d -C $CHARSET test/ascii.txt)
@@ -309,15 +312,27 @@ run_attachment_tests() {
 # Run all body tests
 #
 run_body_tests() {
-	run_test 'can attach a file body in the ascii characterset' \
-		"^$BODY" \
-		< <(echo "$BODY" | $PROG -d -i -)
-	run_test 'can attach a file body in the russian characterset, quoted-printable' \
-		"$BODY2q" \
+	run_test 'can attach a text part in the ascii characterset, quoted-printable' \
+		"^$BODY_ASC_QP" \
+		< <(echo "$BODY_ASC" | $PROG -d -i -)
+	run_test 'can attach a text part in the russian characterset, quoted-printable' \
+		"$BODY_RUS_QP" \
 		< <($PROG -d -i -q -C $CHARSET2 test/koi8-r.txt)
-	run_test 'can attach a file body in the russian characterset, base64' \
-		"$BODY2m" \
+	run_test 'can attach a text part in the russian characterset, base64' \
+		"$BODY_RUS_MM" \
 		< <($PROG -d -i -m -C $CHARSET2 test/koi8-r.txt)
+	run_test 'can attach a binary part, base64' \
+		"$BODY_PNG_MM" \
+		< <($PROG -d -m test/tick.png)
+	run_test 'preserves line endings in binary parts, quoted-printable' \
+		"$BODY_PNG_QP" \
+		< <($PROG -d -q test/tick.png)
+	run_test 'preserves line endings in format=fixed text parts, quoted-printable' \
+		"$BODY_ASC_QP=0A=\r$" \
+		< <(echo "$BODY_ASC" | $PROG -d -i -)
+	run_test 'converts line endings in format=flowed text parts, quoted-printable' \
+		"$BODY_ASC_QP\r$" \
+		< <(echo "$BODY_ASC" | $PROG -d -i -F -)
 }
 
 # Run all tests
