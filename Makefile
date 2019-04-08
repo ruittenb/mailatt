@@ -88,22 +88,29 @@ test: $(PROG) ## Run simple tests
 		echo 'Test 12 succesful (content-transfer-encoding)'
 	@./$(PROG) -d -r $(TO) -u mailatt |                             \
 		grep '^begin 755 mailatt' >$(NULL) &&                   \
-		echo 'Test 13 succesful (uuencode begin line)'
+		echo 'Test 13 succesful (uuencode mode line)'
+	@./$(PROG) -d -i test/msdos.html test/tick.png |                \
+		grep -v '^Content-MD5: ' >$(NULL) &&                    \
+		echo 'Test 14 succesful (content-md5)'
+	@! ./$(PROG) -d -D -i test/long-lines.txt |                     \
+		grep -v 'Content-MD5: ' |                               \
+		grep '^Content-MD5: ' >$(NULL) &&                       \
+		echo 'Test 15 succesful (content-md5)'
 	@echo | ./$(PROG) -d -i - |                                     \
 		grep '^Content-Disposition: inline' >$(NULL) &&         \
-		echo 'Test 14 succesful (content-disposition)'
+		echo 'Test 16 succesful (content-disposition)'
 	@echo | ./$(PROG) -d - |                                        \
 		grep '^Content-Disposition: attachment' >$(NULL) &&     \
-		echo 'Test 15 succesful (content-disposition)'
+		echo 'Test 17 succesful (content-disposition)'
 	@echo | ./$(PROG) -d -i -M text/html - |                        \
 		grep '^Content-Type: text/html' >$(NULL) &&             \
-		echo 'Test 16 succesful (mime type)'
+		echo 'Test 18 succesful (mime type)'
 	@echo | ./$(PROG) -d -i -M application/x-pdf - |                \
 		grep '^Content-Type: application/x-pdf' >$(NULL) &&     \
-		echo 'Test 17 succesful (mime type)'
+		echo 'Test 19 succesful (mime type)'
 	@echo $(BODY) | ./$(PROG) -d -i - |                             \
 		grep '^'$(BODY) >$(NULL) &&                             \
-		echo 'Test 18 succesful (body)'
+		echo 'Test 20 succesful (body)'
 
 .PHONY: install
 install: $(PROG) ## Copy script and manpage to system directories

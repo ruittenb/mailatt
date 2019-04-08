@@ -3,12 +3,12 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.19.1
+# Version:	1.20
 # Created:	2011-02-11
-# Date:		2019-03-31
+# Date:		2019-04-01
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]
+# Usage:	mailatt [ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
 #			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
 #			[ -s <subject> ] [ -H <headerline> ]
 #			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
@@ -18,8 +18,8 @@
 # TODO:		test: unfolded header lines
 #		test: fold lines 'testing a very long subject line to see if
 #		everything works out fine for this type of encoding' | fmt -w80
+#			f_hanging_indent ?
 #		feat: implement multipart/related using content-id?
-#		feat: Content-MD5 header?
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19.1
+.ds Vw @(#) mailatt 1.20
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -49,6 +49,7 @@ f_initialize() {
 	f_findawk
 	f_select_encoder init
 	f_find_cid_data
+	f_find_md5sum
 	#source mime-identify ''
 	attno=0
 	charset=us-ascii
@@ -76,6 +77,16 @@ f_findawk() {
 	fi
 }
 
+f_find_md5sum() {
+	if f_has md5; then
+		md5sum=md5
+	elif f_has md5sum; then
+		md5sum=md5sum
+	else
+		md5sum=
+	fi
+}
+
 f_echo() {
 	printf "%b\n" "$*"
 }
@@ -85,7 +96,7 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0\t[ -Iai ] [ -Vd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "Usage: $argv0\t[ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
 	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
 	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
@@ -235,7 +246,10 @@ f_add_addresses() {
 }
 
 #
-# Not all systems have mmencode(1); therefore, we'll encode it here
+# Not all systems have mmencode(1) or base64(1); therefore, we'll encode it here.
+# Note: the number of bytes on each line MUST be a multiple of 3
+#
+# This was remotely based on a script by Peter van Eerten (c) March 6 2003
 #
 # @param {int} whether we are encoding a mime part (0) or header field (1)
 #
@@ -250,10 +264,6 @@ f_base64encode_bytes() {
 	#    Debian 3.0
 	#    Darwin 17.7.0
 	$awk -v inheader="$1" '
-		# encode file to base64
-		# remotely based on a script by Peter van Eerten (c) March 6 2003
-		# note: the number of bytes on each line MUST be a multiple of 3
-		#
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -295,16 +305,14 @@ f_base64encode_bytes() {
 }
 
 #
-# not all systems have uuencode(1); therefore, we'll encode it here
+# Not all systems have uuencode(1); therefore, we'll encode it here
+# Note: the number of bytes on each line MUST be a multiple of 3
 #
 f_uuencode_bytes() {
 	# Tested on:
 	#    SunOS 5.11
 	#    Darwin 17.7.0
 	$awk '
-		# uuencode file
-		# note: the number of bytes on each line MUST be a multiple of 3
-		#
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -560,6 +568,30 @@ f_contentid() {
 	f_echo "$cidtime.$cidrandom.$attno.${fname}@$cidhost" | sed 's/>/_/g'
 }
 
+f_md5sum() {
+	test -z "$md5sum" && return
+	# Some md5 programs produce verbose output.
+	# Filter that out and keep just the md5sum itself.
+	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | $awk '
+		BEGIN {
+			for ( n = 0; n < 16; n++ ) {
+				hexnibble[sprintf("%x", n)] = n
+				hexnibble[sprintf("%X", n)] = n
+			}
+		}
+		function printhexbyte(hexstr)
+		{
+			byte = hexnibble[substr(hexstr, 1, 1)] * 16 + hexnibble[substr(hexstr, 2, 1)]
+			printf("%c", byte)
+		}
+		{
+			for (i = 1; i < 32; i += 2) {
+				printhexbyte(substr($0, i, 2));
+			}
+		}
+	' | f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
+}
+
 f_composemail() {
 	f_startmail
 	f_process_all_files "$@"
@@ -567,12 +599,14 @@ f_composemail() {
 }
 
 f_binattach() {
+	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo "Content-Transfer-Encoding: $bin_encoding"
 	f_echo
 	$bin_encoder "$1"
 }
 
 f_ascattach() {
+	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
 	f_echo "Content-Transfer-Encoding: $asc_encoding"
 	f_echo
 	$asc_encoder "$1"
@@ -1030,9 +1064,11 @@ f_mime_identify() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:H:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
+while getopts "8C:DH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
+			;;
+		D)	md5sum=
 			;;
 		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
@@ -1131,7 +1167,7 @@ S<<  C<[ -8mqu ]>                         >>
 
 =item Debug options:
 
-S<<  C<[ -Vd ]>                           >>
+S<<  C<[ -DVd ]>                          >>
 
 =back
 
@@ -1142,8 +1178,27 @@ Please note that the order of the commandline options is significant.
 
 =head1 DESCRIPTION
 
-B<mailatt> is used to send multipart MIME e-mail with file attachments
-of any format.
+B<mailatt> is used to send multipart MIME e-mail messages with file attachments.
+
+The message can be composed in either of two possible formats:
+
+=over 4
+
+=item I<multipart/mixed>
+
+This is the default.  It signifies that the message contains a collection
+of files which are not necessarily related.
+
+=item I<multipart/alternative>
+
+This message type can be used to provide alternative representations of the
+same file (I<e.g.> plain text and HTML), in which case the mail client
+can select one to present.  See also the B<-a> option below.
+
+=back
+
+Files can be of any MIME type and can be attached using several encoding
+types:
 
 =over 3
 
@@ -1168,22 +1223,11 @@ Files of type I<message/*> or I<multipart/*> will always be attached using
 
 =back
 
-B<mailatt> can send messages in two possible formats:
-
-=over 4
-
-=item I<multipart/mixed>
-
-This is the default.  It signifies that the message contains a collection
-of files which are not necessarily related.
-
-=item I<multipart/alternative>
-
-This message type can be used to provide alternative representations of the
-same file (I<e.g.> plain text and HTML), in which case the mail client
-can select one to present.  See also the B<-a> option below.
-
-=back
+If the host system has an md5(1) or md5sum(1) program, a C<Content-MD5>
+header will be added for all ascii and binary attachments to ensure data
+integrity to some extent.  Attachments of types I<message/*> or
+I<multipart/*> will never have any C<Content-MD5> header, since RFC 1864
+disallows it.  See also the B<-D> option.
 
 =head1 OPTIONS
 
@@ -1217,6 +1261,12 @@ Some often used character sets:
     ISO-8859-3   EUC-JP        Big5           Windows-1256
     ISO-8859-4   EUC-KR        Windows-874    Windows-1257
     ISO-8859-5   EUC-CN        Windows-1250   Windows-1258
+
+=item -D
+
+Suppress sending a C<Content-MD5> header line. This prevents mail
+clients from checking the file checksums, which may be useful in case
+problems are encountered.
 
 =item -H I<headerline>
 
@@ -1403,7 +1453,7 @@ Send a formatted file, preceded by an introductory message, typed
 interactively:
 
   mailatt -s manual -r beatrix@drakensteyn.nl -i - sendmail.pdf
-  Good morning Your Majesty,
+  Good morning Your Royal Highness,
   Attached you will find the sendmail manual I promised.
   ^D
 
@@ -1495,7 +1545,7 @@ this is not enforced, since the file is attached as-is.
 
 =head1 SEE ALSO
 
-base64(1), mail(1), mailx(1), mmencode(1), sendmail(8), uuencode(1).
+mail(1), mailx(1), md5(1), md5sum(1), sendmail(8).
 
 =over 10
 
@@ -1506,6 +1556,10 @@ Format of Internet Text Messages
 =item RFC 1049:
 
 The Content-Type Header Field for Internet Messages
+
+=item RFC 1864:
+
+The Content-MD5 Header Field
 
 =item RFC 2045:
 
@@ -1545,8 +1599,10 @@ Internet Message Format
 
 =begin comment
 
-RFC 1521: MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
-RFC 1522: MIME Part Two: Message Header Extensions for Non-ASCII Text
+RFC 1321: The MD5 Message-Digest Algorithm
+RFC 1544 (obsolete): The Content-MD5 Header Field
+RFC 1521 (obsolete): MIME Part One: Mechanisms for Specifying and Describing the Format of Internet Message Bodies
+RFC 1522 (obsolete): MIME Part Two: Message Header Extensions for Non-ASCII Text
 RFC 2646: The text/plain Format parameter
 RFC 4021: Registration of Mail and MIME Header Fields
 
