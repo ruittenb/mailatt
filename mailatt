@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.22
+# Version:	1.23
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -20,6 +20,10 @@
 #		bug: darwin user database may contain non-ascii characters
 #		examine: RFC 3676: The Text/Plain Format and DelSp Parameters
 #		feat: send inline us-ascii as 7-bit?
+#		bug: store '-' file in temp file
+#		bug: check difference between 8bit and binary encodings
+#			https://tools.ietf.org/html/rfc6152
+#			https://tools.ietf.org/html/rfc3030
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +37,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.22
+.ds Vw @(#) mailatt 1.23
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -47,9 +51,9 @@ This manual pertains to \fBmailatt\fP version \\$3.
 f_initialize() {
 	f_setpath
 	f_findawk
-	f_select_encoder init
 	f_find_cid_data
 	f_find_md5sum
+	f_select_encoder init
 	#source mime-identify ''
 	attno=0
 	charset=us-ascii
@@ -135,7 +139,7 @@ f_getusername() {
 	' | head -1
 }
 
-f_notify_interactive() {
+f_notify_if_interactive() {
 	test -t 0 && f_echo "Reading document from stdin..." 1>&2
 }
 
@@ -154,9 +158,44 @@ f_has() {
 	return 1
 }
 
+#
+# Stores data received from stdin in a temporary file.
+# Changes the variable 'fname' to the new filename.
+#
+f_store_pipe_data() {
+	if f_has mktemp; then
+		if [ `uname` = HP-UX ]; then
+			mktemp_opts=-c
+		fi
+		fname=$(mktemp $mktemp_opts)
+	else
+		while [ -z "${fname#-}" -o -f "$fname" ]; do
+			fname=/tmp/mailatt.$RANDOM.$RANDOM.$RANDOM.$RANDOM.$RANDOM
+		done
+		# race condition, unavoidable without mktemp(1)
+		touch "$fname" && chmod 600 "$fname"
+	fi
+	f_notify_if_interactive
+	cat > "$fname"
+}
+
+f_boundbits() {
+	echo "$RANDOM $RANDOM * $RANDOM * $$ * 63o p" | dc | $awk 'BEGIN {
+		set="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
+	}
+	{
+		for (i = 1;i <= NF; i++) {
+			printf(substr(set, $i+1, 1));
+		}
+	}
+	END {
+		print "";
+	}'
+}
+
 f_find_cid_data() {
 	cidtime="$(date +"%Y%m%d%H%M%S")"
-	cidrandom="`f_boundbits`"
+	cidrandom=$(f_boundbits)
 	cidhost="$(hostname)" 2>/dev/null
 }
 
@@ -479,21 +518,15 @@ f_adjust_linelen() {
 # 0000020     0   0   0  16   0   0   0  16   8   6   0   0   0  31 243 255
 # 0000040    97   0   0   0   4 103  65  77  65   0   0 177 142 124 251  81
 #
-# @param {string} input filename, or - to read from stdin
+# @param {string} input filename, or empty to read from stdin
 #
 f_dissect() {
+	fname="$1"
 	# some platforms don't have od(1)
 	if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
-		if [ "x$1" == x- ]; then
-			# Read from stdin. Not all versions of hexdump(1)
-			# support '-' as a shorthand for stdin.
-			arg=
-		else
-			arg="$1"
-		fi
-		hexdump -v -e '"%06.6_ao " 16/1 "%3u " "\n"' ${arg:+"$arg"}
+		hexdump -v -e '"%06.6_ao " 16/1 "%3u " "\n"' ${fname:+"$fname"}
 	else
-		od -t u1 -v ${1:+"$1"}
+		od -t u1 -v ${fname:+"$fname"}
 	fi
 }
 
@@ -544,20 +577,6 @@ f_select_encoder() {
 	esac
 }
 
-f_boundbits() {
-	echo "$RANDOM $RANDOM * $RANDOM * $$ * 63o p" | dc | $awk 'BEGIN {
-		set="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
-	}
-	{
-		for (i=1;i<=NF;i++) {
-			printf(substr(set, $i+1, 1));
-		}
-	}
-	END {
-		print "";
-	}'
-}
-
 f_startmail() {
 	test "$addresses"   && f_echo "$addresses"
 	test "$subject"     && f_echo "$subject"
@@ -587,7 +606,7 @@ f_sendmail() {
 }
 
 f_contentid() {
-	f_echo "$cidtime.$cidrandom.$attno.${fname}@$cidhost" | sed 's/>/_/g'
+	f_echo "$cidtime.$cidrandom.$attno.${fname##*/}@$cidhost" | sed 's/>/_/g'
 }
 
 f_md5sum() {
@@ -621,28 +640,31 @@ f_composemail() {
 }
 
 f_binattach() {
-	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
-	f_echo "Content-Transfer-Encoding: $bin_encoding"
-	f_echo
-	$bin_encoder "$1"
+	fname="$1"
+	test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
+	f_echon "Content-Transfer-Encoding: $bin_encoding\n\n"
+	$bin_encoder "$fname"
 }
 
 f_ascattach() {
-	test -n "${1#-}" -a "$md5sum" && f_echo "Content-MD5: $(f_md5sum $1)"
-	f_echo "Content-Transfer-Encoding: $asc_encoding"
-	f_echo
-	$asc_encoder "$1"
+	fname="$1"
+	test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
+	f_echon "Content-Transfer-Encoding: $asc_encoding\n\n"
+	$asc_encoder "$fname"
 }
 
 f_msgattach() {
+	fname="$1"
 	# RFC 2045 states: it is EXPRESSLY FORBIDDEN to use any encodings
 	# other than "7bit", "8bit", or "binary" with any composite media type,
 	# i.e. one that recursively includes other Content-Type fields.
 	# Currently the only composite media types are "multipart" and "message". 
 	#
-	f_echo "Content-Transfer-Encoding: 8bit"
-	f_echo
-	cat "$1"
+	# RFC 1864 states: the Content-MD5 field may be used with any
+	# content type other than multipart or message/rfc822.
+	#
+	f_echon "Content-Transfer-Encoding: 8bit\n\n"
+	cat "$fname"
 }
 
 f_attachit() {
@@ -683,22 +705,40 @@ f_attachment() { # {a|b} mimetype
 			contenttype=application/octet-stream
 		fi
 	fi
-	if [ "x$fname" = x- ]; then
-		f_notify_interactive
-		neatname=stdin
-	elif [ ! -r "$fname" ]; then
+	while [ ! -r "$fname" ]; do
 		f_echo "$argv0: Cannot attach \"$fname\": file not readable" >&2
-		f_echon "Send mail anyway? (y/n) [n] " >&2
+		f_echon "Retry attaching (r), skip this attachment (s) or abort mail (a)? " >&2
 		read ans < /dev/tty
-		if [ "${ans#n}" != "$ans" -o -z "$ans" ]; then
-			exit 2
+		if [ "${ans#r}" != "$ans" ]; then
+			: # retry
+		elif [ "${ans#s}" != "$ans" ]; then
+			return # skip
 		else
-			return
+			exit 2 # abort
 		fi
+	done
+	f_attachit
+}
+
+f_process_one_file() {
+	fname="$1"
+	mimetype="$2" # explicit mimetype requested?
+	if [ "x$fname" = x- ]; then
+		f_store_pipe_data
+		neatname=stdin
+		# default if not explicitly specified
+		: ${mimetype:=text/plain}
 	else
 		neatname="$(basename "$fname")"
 	fi
-	f_attachit
+	if [ "${mimetype%%/*}" == text ]; then
+		f_attachment a "$mimetype"
+		return
+	elif [ -n "$mimetype" ]; then
+		f_attachment b "$mimetype"
+		return
+	fi
+	f_attachment $(f_mime_identify "$fname")
 }
 
 f_process_all_files() {
@@ -745,23 +785,6 @@ f_process_all_files() {
 			inline_or_attachment=attachment
 		fi
 	done
-}
-
-f_process_one_file() {
-	fname="$1"
-	mimetype="$2" # explicit mimetype requested?
-	if [ "${mimetype%%/*}" == text ]; then
-		f_attachment a "$mimetype"
-		return
-	elif [ -n "$mimetype" ]; then
-		f_attachment b "$mimetype"
-		return
-	fi
-	if [ "x$fname" = x- ]; then
-		f_attachment a text/plain
-	else
-		f_attachment $(f_mime_identify "$fname")
-	fi
 }
 
 ############################################################################
