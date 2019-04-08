@@ -19,8 +19,10 @@ SUBJECT_ISO='Réseau Besançon € 12'
 SUBJECT2_ISO="Ce breuvage sucré est rafraîchissant et plein de goût. Parfait à déguster lors de chaudes journées d'été."
 HEADER='X-Testing: testing'
 BODY='Message body'
-BODY2='=F3=CC=C1=D7=D8=D3=D1'
+BODY2q='=F3=CC=C1=D7=D8=D3=D1'
+BODY2m=A2iDOxdLV28
 CHARSET=ISO-8859-15
+CHARSET2=KOI8-R
 
 let num=0
 
@@ -223,14 +225,24 @@ run_header_tests() {
 run_attachment_tests() {
 	run_test 'content-md5: is present by default' \
 		'^Content-MD5: ' \
-		< <($PROG -d -i test/msdos.html test/tick.png)
+		< <($PROG -d test/tick.png)
 	run_test 'content-md5: is absent if requested' \
 		'!^Content-MD5: ' \
 		< <($PROG -d -D -i test/long-lines.txt)
 
-	run_test 'content-transfer-encoding: default for text/plain is quoted-printable' \
+	run_test 'text formatting is fixed by default' \
+		'!; format="flowed"' \
+		< <($PROG -d test/ascii.txt)
+	run_test 'text formatting can be set to flowed' \
+		'; format="flowed"' \
+		< <($PROG -d -F test/ascii.txt)
+
+	run_test 'content-transfer-encoding: default for fixed text/plain is quoted-printable' \
 		'Transfer-Encoding: quoted-printable' \
 		< <($PROG -d -r "$TO" test/ascii.txt)
+	run_test 'content-transfer-encoding: default for flowed text/plain is 7bit' \
+		'Transfer-Encoding: 7bit' \
+		< <($PROG -d -r "$TO" -F test/ascii.txt)
 	run_test 'content-transfer-encoding: default for image/png is base64' \
 		'Transfer-Encoding: base64' \
 		< <($PROG -d -r "$TO" test/tick.png)
@@ -254,35 +266,44 @@ run_attachment_tests() {
 		'^begin 644 ascii.txt' \
 		< <($PROG -d -r "$TO" -u test/ascii.txt)
 
-	run_test 'MIME type text/plain is the default for stdin attachment in 1st place' \
+	run_test 'content-type: text/plain is the default for stdin attachment in 1st place' \
 		'^Content-Type: text/plain' \
 		< <($PROG -d -i - < test/hydrazine.pdb)
-	run_test 'MIME type text/plain is the default for stdin attachment in 2nd place' \
+	run_test 'content-type: text/plain is the default for stdin attachment in 2nd place' \
 		'^Content-Type: text/plain' \
 		< <($PROG -d -i test/msdos.html - < test/hydrazine.pdb)
-	run_test 'MIME type text/html can be set on stdin attachment' \
+	run_test 'content-type: text/html can be set on stdin attachment' \
 		'^Content-Type: text/html' \
 		< <($PROG -d -i -M text/html - < test/msdos.html)
-	run_test 'MIME type application/pdf can be set on stdin attachment' \
+	run_test 'content-type: application/pdf can be set on stdin attachment' \
 		'^Content-Type: application/x-pdf' \
 		< <(echo | $PROG -d -i -M application/x-pdf -)
-	run_test 'MIME type image/png is inferred from filename correctly' \
+	run_test 'content-type: image/png is inferred from filename correctly' \
 		'^Content-Type: image/png' \
 		< <($PROG -d test/tick.png)
-	run_test 'MIME type application/octet-stream is used for unknown types' \
+	run_test 'content-type: application/octet-stream is used for unknown types' \
 		'^Content-Type: application/octet-stream' \
 		< <($PROG -d test/program)
 
-	run_test "filename is reported correctly for stdin attachment" \
-		'^Content-Type: text/plain; charset="us-ascii"; name="stdin"' \
+	run_test 'filename is reported correctly for stdin attachment' \
+		'^Content-Type: text/plain;.* name="stdin"' \
 		< <($PROG -d - < test/ascii.txt)
-	run_test "filename is reported correctly for file attachment" \
-		'^Content-Type: text/plain; charset="us-ascii"; name="ascii.txt"' \
+	run_test 'filename is reported correctly for file attachment in ascii charset' \
+		'^Content-Type: text/plain;.* name="ascii.txt"' \
 		< <($PROG -d test/ascii.txt)
-	run_test "filename is reported correctly for file attachment in non-ascii charset" \
-		'^Content-Type: text/plain; charset="'$CHARSET'"; name="ascii.txt"' \
+	run_test 'filename is reported correctly for file attachment in iso charset' \
+		'^Content-Type: text/plain;.* name="ascii.txt"' \
 		< <($PROG -d -C $CHARSET test/ascii.txt)
 
+	run_test 'charset is reported correctly for file attachment in ascii charset' \
+		'^Content-Type: text/plain; charset="us-ascii"' \
+		< <(echo "$BODY" | $PROG -d -i -)
+	run_test 'charset is reported correctly for file attachment in iso charset' \
+		'^Content-Type: text/plain; charset="'$CHARSET'"' \
+		< <($PROG -d -C $CHARSET test/ascii.txt)
+	run_test 'charset is reported correctly for file attachment in russian charset' \
+		'^Content-Type: text/plain; charset="'$CHARSET2'"' \
+		< <($PROG -d -C $CHARSET2 test/ascii.txt)
 }
 
 # Run all body tests
@@ -291,9 +312,12 @@ run_body_tests() {
 	run_test 'can attach a file body in the ascii characterset' \
 		"^$BODY" \
 		< <(echo "$BODY" | $PROG -d -i -)
-	run_test 'can attach a file body in the russian characterset' \
-		"^$BODY2" \
-		< <($PROG -d -i -C KOI8-R test/koi8-r.txt)
+	run_test 'can attach a file body in the russian characterset, quoted-printable' \
+		"$BODY2q" \
+		< <($PROG -d -i -q -C $CHARSET2 test/koi8-r.txt)
+	run_test 'can attach a file body in the russian characterset, base64' \
+		"$BODY2m" \
+		< <($PROG -d -i -m -C $CHARSET2 test/koi8-r.txt)
 }
 
 # Run all tests

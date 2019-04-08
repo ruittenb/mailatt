@@ -135,7 +135,7 @@
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.23.1
+.ds Vw @(#) mailatt 1.23.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -152,7 +152,7 @@ mailatt \- send e\-mail with attachments
 \&\f(CW\*(C`mailatt { \-h | \-v }\*(C'\fR
 .IP "Message options:" 4
 .IX Item "Message options:"
-\&\f(CW\*(C`[\ \-Iai\ ]\*(C'\fR
+\&\f(CW\*(C`[\ \-FIai\ ]\*(C'\fR
 .IP "Header options:" 4
 .IX Item "Header options:"
 \&\f(CW\*(C`[\ \-r\ \*(C'\fR\fIrecipients\fR\f(CW\*(C`\ ]\*(C'\fR
@@ -249,6 +249,18 @@ Some often used character sets:
 Suppress sending a \f(CW\*(C`Content\-MD5\*(C'\fR header line. This prevents mail
 clients from checking the file checksums, which may be useful in case
 problems are encountered.
+.IP "\-F" 4
+.IX Item "-F"
+Specifies that the first attachment must be attached with the
+\&\fBformat=flowed\fR parameter. This signals to e\-mail clients that the
+text may be flowed by paragraph and quotations may be rendered in a
+more legible way, e.g. with quote bars.  This prevents incorrect
+parsing of \fB>\fR characters at the start of lines.
+.Sp
+This is probably only useful in combination with \fB\-i\fR and a
+\&\fItext/plain\fR attachment.
+.Sp
+See also \fB\-i\fR.
 .IP "\-H \fIheaderline\fR" 4
 .IX Item "-H headerline"
 Specifies a line to add to the mail header. This option can be used

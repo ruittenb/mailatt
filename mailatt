@@ -3,12 +3,12 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.23.1
+# Version:	1.23.2
 # Created:	2011-02-11
 # Date:		2019-04-06
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
+# Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
 #			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
 #			[ -s <subject> ] [ -H <headerline> ]
 #			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
@@ -35,7 +35,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.23.1
+.ds Vw @(#) mailatt 1.23.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -54,6 +54,8 @@ f_initialize() {
 	f_select_encoder init
 	#source mime-identify ''
 	attno=0
+	flowed=
+	mimetype=
 	charset=us-ascii
 	mixed_or_alternative=mixed
 	inline_or_attachment=attachment
@@ -98,7 +100,7 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0\t[ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "Usage: $argv0\t[ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
 	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
 	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
@@ -475,6 +477,10 @@ f_qpencode_file_linewise() {
 	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
 }
 
+f_qpencode_file_charwise() {
+	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0
+}
+
 #
 # Extend the hexdump/octal dump output to contain a certain number of fields
 # per line. This will correspond to the number of characters per line after
@@ -647,12 +653,12 @@ f_binattach() {
 f_ascattach() {
 	fname="$1"
 	# RFC 3676 states about text/plain:
-	#   If Format is not specified, or if the value is not recognized,a value of Fixed is assumed.
-	#   If DelSp is not specified, or if its value is not recognized, a value of No is assumed.
+	#   If Format is not specified, or if its value is not recognized, a value of Fixed is assumed.
+	#   If DelSp  is not specified, or if its value is not recognized, a value of No is assumed.
 	#
-	if [ "$inline_or_attachment" = inline -a "$(f_lowercase $charset)" = us-ascii ]; then
+	if [ -n "$flowed" ]; then
 		f_echon "Content-Transfer-Encoding: 7bit\n\n"
-		cat "$fname" # line endings will be corrected later
+		f_qpencode_file_charwise "$fname" # line endings (CR/LF) will be corrected later
 	else
 		test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
 		f_echon "Content-Transfer-Encoding: $asc_encoding\n\n"
@@ -676,6 +682,8 @@ f_msgattach() {
 
 f_attachit() {
 	let attno=attno+1
+	charsetspec="; charset=\"$charset\""
+	flowspec=${flowed:+"; format=\"flowed\""}
 	if [ -n "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
 		namespec="; name=\"$neatname\""
 		fnamespec="; name=\"$neatname\""
@@ -690,13 +698,13 @@ f_attachit() {
 	if [ "${contenttype%%/*}" == message   \
 	-o   "${contenttype%%/*}" == multipart ];
 	then
-		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_echo "Content-Type: ${contenttype}${charsetspec}${namespec}"
 		f_msgattach "$fname" "$neatname"
 	elif [ "$ascbin" == a ]; then
-		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_echo "Content-Type: ${contenttype}${charsetspec}${namespec}${flowspec}"
 		f_ascattach "$fname" "$neatname"
 	else # [ $ascbin == b ]
-		f_echo "Content-Type: $contenttype$namespec"
+		f_echo "Content-Type: ${contenttype}${namespec}"
 		f_binattach "$fname" "$neatname"
 	fi
 }
@@ -783,11 +791,14 @@ f_process_all_files() {
 
 		# process file
 		f_process_one_file "$opt" $mimetype
-		mimetype=
 
-		# switch content-disposition for all following files
-		# from inline to attachment if multipart/mixed,
-		# but not for multipart/alternative
+		# the -M option is only valid for one file at a time
+		mimetype=
+		# the -F option is only valid for the first (inline) attachment
+		flowed=
+
+		# if multipart/mixed, then switch content-disposition from
+		# inline to attachment for all following files
 		if [ "$mixed_or_alternative" != alternative ]; then
 			inline_or_attachment=attachment
 		fi
@@ -854,6 +865,7 @@ f_mime_identify() {
 		docx)		echo b application/msword			;;
 		dot)		echo b application/msword			;;
 		dvi)		echo b application/x-dvi			;;
+		dwf)		echo b model/vnd.dwf				;;
 		elm)		echo a application/x-elm			;;
 		eml)		echo a message/rfc822				;;
 		eot)		echo b application/vnd.ms-fontobject		;;
@@ -1116,11 +1128,14 @@ f_mime_identify() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:DH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
+# not all shells support executing 'getopts' inside a function
+while getopts "8C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
 		D)	md5sum=
+			;;
+		F)	flowed=1
 			;;
 		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
@@ -1199,7 +1214,7 @@ C<mailatt { -h | -v }>
 
 =item Message options:
 
-S<<  C<[ -Iai ]>                          >>
+S<<  C<[ -FIai ]>                         >>
 
 =item Header options:
 
@@ -1323,6 +1338,19 @@ Some often used character sets:
 Suppress sending a C<Content-MD5> header line. This prevents mail
 clients from checking the file checksums, which may be useful in case
 problems are encountered.
+
+=item -F
+
+Specifies that the first attachment must be attached with the
+B<format=flowed> parameter. This signals to e-mail clients that the
+text may be flowed by paragraph and quotations may be rendered in a
+more legible way, e.g. with quote bars.  This prevents incorrect
+parsing of B<E<gt>> characters at the start of lines.
+
+This is probably only useful in combination with B<-i> and a
+I<text/plain> attachment.
+
+See also B<-i>.
 
 =item -H I<headerline>
 
