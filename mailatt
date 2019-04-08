@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.19.4
+# Version:	1.19.5
 # Created:	2011-02-11
 # Date:		2019-04-01
 # Author:	Rene Uittenbogaard
@@ -33,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.19.4
+.ds Vw @(#) mailatt 1.19.5
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -570,10 +570,26 @@ f_contentid() {
 
 f_md5sum() {
 	test -z "$md5sum" && return
-	# md5 programs have a tendency to product verbose output.
-	# filter that out and keep just the md5sum itself.
-	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | \
-		f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
+	# Some md5 programs produce verbose output.
+	# Filter that out and keep just the md5sum itself.
+	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | $awk '
+		BEGIN {
+			for ( n = 0; n < 16; n++ ) {
+				hexnibble[sprintf("%x", n)] = n
+				hexnibble[sprintf("%X", n)] = n
+			}
+		}
+		function printhexbyte(hexstr)
+		{
+			byte = hexnibble[substr(hexstr, 1, 1)] * 16 + hexnibble[substr(hexstr, 2, 1)]
+			printf("%c", byte)
+		}
+		{
+			for (i = 1; i < 32; i += 2) {
+				printhexbyte(substr($0, i, 2));
+			}
+		}
+	' | f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
 }
 
 f_composemail() {
