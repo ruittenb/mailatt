@@ -3,12 +3,12 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.23
+# Version:	1.24
 # Created:	2011-02-11
-# Date:		2019-04-01
+# Date:		2019-04-06
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
-# Usage:	mailatt [ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
+# Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
 #			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
 #			[ -s <subject> ] [ -H <headerline> ]
 #			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
@@ -16,11 +16,9 @@
 #		mailatt { -h | -v }
 #
 # TODO:
-#		feat: implement multipart/related using content-id?
-#		bug: darwin user database may contain non-ascii characters
+#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy
 #		examine: RFC 3676: The Text/Plain Format and DelSp Parameters
-#		feat: send inline us-ascii as 7-bit?
-#		bug: store '-' file in temp file
+#		bug: darwin user database may contain non-ascii characters
 #		bug: check difference between 8bit and binary encodings
 #			https://tools.ietf.org/html/rfc6152
 #			https://tools.ietf.org/html/rfc3030
@@ -37,7 +35,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.23
+.ds Vw @(#) mailatt 1.24
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -56,6 +54,8 @@ f_initialize() {
 	f_select_encoder init
 	#source mime-identify ''
 	attno=0
+	flowed=
+	mimetype=
 	charset=us-ascii
 	mixed_or_alternative=mixed
 	inline_or_attachment=attachment
@@ -100,7 +100,7 @@ f_echon() {
 }
 
 f_usage() {
-	f_echo "Usage: $argv0\t[ -Iai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
+	f_echo "Usage: $argv0\t[ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
 	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
 	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
@@ -241,11 +241,11 @@ f_hanging_indent() {
 }
 
 f_encode_header() {
-	line="$1"
+	typeset line="$1"
 	if [ "$(f_lowercase $charset)" = us-ascii ]; then
 		f_echo "$line" | fmt -w 70
 	else
-		f_echon "$line" | f_dissect | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
+		f_echon "$line" | f_bytedump | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
 			f_echo "=?${charset}?${header_encoding}?${encoded}?="
@@ -424,7 +424,11 @@ f_uuencode_bytes() {
 # QP-encode the output of the hexdump/octal dump.
 #
 # @param {int} whether we are encoding a mime part (0) or header field (1)
-# @param {int} whether we want compact (0) or readable, linewise encoding (1)
+# @param {int} how linefeeds (chr(10)) should be encoded:
+#		0:  \n      for most legible representation of text files
+#		1:  =0A=\n  for byte-true encoding of text files
+#		2:  =0A     for byte-true encoding of binaries
+# Note that right before sending, all line endings will be converted to \r\n
 #
 f_qpencode_bytes() {
 	# Tested on:
@@ -436,18 +440,21 @@ f_qpencode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v inheader="$1" -v linewise="$2" '
+	$awk -v inheader="$1" -v linefeed="$2" '
 		NF > 1 {
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
 			for (i = 2; i <= NF; i++) {
-				# test if normal ascii, but not full stop (46)
-				# (causes errors at start of line) or equals sign (61)
-				#
-				if (($i > 32) && ($i != 46) && ($i != 61) && ($i < 127))   printf("%c", $i)
-				# space
+				# normal ascii, but not space or equals sign (61)
+				if (($i > 32) && ($i != 61) && ($i < 127))                 printf("%c", $i)
+				# space, if not in header and not the first or last char on line
 				else if (($i == 32) && (!inheader) && (i > 2) && (i < NF)) printf(" ")
-				# newline
-				else if (($i == 10) && (!inheader) && linewise)            printf("=0A=\n")
+				# if newline, then insert a repesentational line break
+				else if (($i == 10) && (!inheader)) {
+					if (linefeed == 2)                                 printf("=0A")
+					else if (linefeed == 1)                            printf("=0A=\n")
+					# if linefeed == 0 the END block will print a NL
+				}
+				# all other characters: simple qpencoding
 				else                                                       printf("=%02X", $i)
 			}
 		}
@@ -459,22 +466,29 @@ f_qpencode_bytes() {
 
 f_base64encode_file() {
 	# number of fields MUST be a multiple of 3
-	f_dissect ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
 }
 
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
 	# number of fields MUST be a multiple of 3
-	f_dissect ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0 0
 	f_echo "\`\nend"
 }
 
-f_qpencode_file() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 23 | f_qpencode_bytes 0
+f_qpencode_file_binary() {
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 26 | f_qpencode_bytes 0 2
+}
+
+f_qpencode_file_text() {
+	f_bytedump ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
 }
 
 f_qpencode_file_linewise() {
-	f_dissect ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
+	typeset line
+	cat ${1:+"$1"} | while read line; do
+		echo "$line" | f_bytedump | f_adjust_linelen 800 | f_qpencode_bytes 0 0
+	done
 }
 
 #
@@ -520,7 +534,7 @@ f_adjust_linelen() {
 #
 # @param {string} input filename, or empty to read from stdin
 #
-f_dissect() {
+f_bytedump() {
 	fname="$1"
 	# some platforms don't have od(1)
 	if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
@@ -547,9 +561,9 @@ f_select_encoder() {
 			header_encoder=f_base64encode_bytes
 			;;
 		q)	bin_encoding=quoted-printable
-			bin_encoder=f_qpencode_file
+			bin_encoder=f_qpencode_file_binary
 			asc_encoding=quoted-printable
-			asc_encoder=f_qpencode_file_linewise
+			asc_encoder=f_qpencode_file_text
 			header_encoding=Q
 			header_encoder=f_qpencode_bytes
 			;;
@@ -563,7 +577,7 @@ f_select_encoder() {
 		init)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
 			asc_encoding=quoted-printable
-			asc_encoder=f_qpencode_file_linewise
+			asc_encoder=f_qpencode_file_text
 			header_encoding=Q
 			header_encoder=f_qpencode_bytes
 			;;
@@ -630,7 +644,7 @@ f_md5sum() {
 				printhexbyte(substr($0, i, 2));
 			}
 		}
-	' | f_dissect | f_adjust_linelen 33 | f_base64encode_bytes 1
+	' | f_bytedump | f_adjust_linelen 33 | f_base64encode_bytes 1
 }
 
 f_composemail() {
@@ -648,9 +662,18 @@ f_binattach() {
 
 f_ascattach() {
 	fname="$1"
-	test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
-	f_echon "Content-Transfer-Encoding: $asc_encoding\n\n"
-	$asc_encoder "$fname"
+	# RFC 3676 states about text/plain:
+	#   If Format is not specified, or if its value is not recognized, a value of Fixed is assumed.
+	#   If DelSp  is not specified, or if its value is not recognized, a value of No is assumed.
+	#
+	if [ -n "$flowed" ]; then
+		f_echon "Content-Transfer-Encoding: 7bit\n\n"
+		f_qpencode_file_linewise "$fname" # line endings (CR/LF) will be corrected later
+	else
+		test -n "$md5sum" && f_echo "Content-MD5: $(f_md5sum "$fname")"
+		f_echon "Content-Transfer-Encoding: $asc_encoding\n\n"
+		$asc_encoder "$fname"
+	fi
 }
 
 f_msgattach() {
@@ -669,6 +692,8 @@ f_msgattach() {
 
 f_attachit() {
 	let attno=attno+1
+	charsetspec="; charset=\"$charset\""
+	flowspec=${flowed:+"; format=\"flowed\""}
 	if [ -n "$specify_inline_filename" -o "$inline_or_attachment" = attachment ]; then
 		namespec="; name=\"$neatname\""
 		fnamespec="; name=\"$neatname\""
@@ -683,13 +708,13 @@ f_attachit() {
 	if [ "${contenttype%%/*}" == message   \
 	-o   "${contenttype%%/*}" == multipart ];
 	then
-		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_echo "Content-Type: ${contenttype}${charsetspec}${namespec}"
 		f_msgattach "$fname" "$neatname"
 	elif [ "$ascbin" == a ]; then
-		f_echo "Content-Type: $contenttype; charset=\"$charset\"$namespec"
+		f_echo "Content-Type: ${contenttype}${charsetspec}${namespec}${flowspec}"
 		f_ascattach "$fname" "$neatname"
 	else # [ $ascbin == b ]
-		f_echo "Content-Type: $contenttype$namespec"
+		f_echo "Content-Type: ${contenttype}${namespec}"
 		f_binattach "$fname" "$neatname"
 	fi
 }
@@ -776,11 +801,14 @@ f_process_all_files() {
 
 		# process file
 		f_process_one_file "$opt" $mimetype
-		mimetype=
 
-		# switch content-disposition for all following files
-		# from inline to attachment if multipart/mixed,
-		# but not for multipart/alternative
+		# the -M option is only valid for one file at a time
+		mimetype=
+		# the -F option is only valid for the first (inline) attachment
+		flowed=
+
+		# if multipart/mixed, then switch content-disposition from
+		# inline to attachment for all following files
 		if [ "$mixed_or_alternative" != alternative ]; then
 			inline_or_attachment=attachment
 		fi
@@ -847,6 +875,7 @@ f_mime_identify() {
 		docx)		echo b application/msword			;;
 		dot)		echo b application/msword			;;
 		dvi)		echo b application/x-dvi			;;
+		dwf)		echo b model/vnd.dwf				;;
 		elm)		echo a application/x-elm			;;
 		eml)		echo a message/rfc822				;;
 		eot)		echo b application/vnd.ms-fontobject		;;
@@ -1109,11 +1138,14 @@ f_mime_identify() {
 
 f_initialize "${argv0:=$(basename $0)}"
 
-while getopts "8C:DH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
+# not all shells support executing 'getopts' inside a function
+while getopts "8C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
 		D)	md5sum=
+			;;
+		F)	flowed=1
 			;;
 		H)	if [ -n "$headerlines" ]; then
 				headerlines=$(printf "%b\n" "$headerlines" "$OPTARG")
@@ -1192,7 +1224,7 @@ C<mailatt { -h | -v }>
 
 =item Message options:
 
-S<<  C<[ -Iai ]>                          >>
+S<<  C<[ -FIai ]>                         >>
 
 =item Header options:
 
@@ -1229,32 +1261,32 @@ The message can be composed in either of two possible formats:
 
 =over 4
 
-=item I<multipart/mixed>
+=item - I<multipart/mixed>
 
 This is the default.  It signifies that the message contains a collection
 of files which are not necessarily related.
 
-=item I<multipart/alternative>
+One of the message parts may be displayed inline, as the inline
+message body; see the B<-i> option below.
+
+=item - I<multipart/alternative>
 
 This message type can be used to provide alternative representations of the
 same file (I<e.g.> plain text and HTML), in which case the mail client
-can select one to present.  See also the B<-a> option below.
+can show the one it supports.  See also the B<-a> option below.
 
 =back
 
 Files can be of any MIME type and can be attached using several encoding
 types:
 
-=over 3
+=over 4
 
 =item -
 
 Files of type I<text/*> and those that are known to be ASCII-only (like many
 script types) will be attached using quoted-printable encoding by default
-(but see the B<-m> option below).
-
-These files are supposed to be clean 7-bit ASCII unless another character
-set has been specified on the commandline.  See the B<-C> option below.
+(but see also the B<-m> and B<-i> options below).
 
 =item -
 
@@ -1267,6 +1299,10 @@ Files of type I<message/*> or I<multipart/*> will always be attached using
 8bit-encoding, because of requirements imposed by RFC 2045.
 
 =back
+
+Is is usually not necessary to specify the encoding, as B<mailatt> has got
+sensible defaults. Specifying the character set however, is often necessary
+if a text is not clean 7-bit ASCII (see B<-C> below).
 
 If the host system has an md5(1) or md5sum(1) program, a C<Content-MD5>
 header will be added for all ascii and binary attachments to ensure data
@@ -1312,6 +1348,19 @@ Some often used character sets:
 Suppress sending a C<Content-MD5> header line. This prevents mail
 clients from checking the file checksums, which may be useful in case
 problems are encountered.
+
+=item -F
+
+Specifies that the first attachment must be attached with the
+B<format=flowed> parameter. This signals to e-mail clients that the
+text may be flowed by paragraph and quotations may be rendered in a
+more legible way, e.g. with quote bars.  This prevents incorrect
+parsing of B<E<gt>> characters at the start of lines.
+
+This is probably only useful in combination with B<-i> and a
+I<text/plain> attachment.
+
+See also B<-i>.
 
 =item -H I<headerline>
 
@@ -1374,10 +1423,16 @@ Print help (usage information) and exit.
 
 =item -i
 
-Specifies that the first file on the commandline must be forcibly included
-with a C<Content-Disposition: inline> header, and without a filename.
+Specifies that the first file on the commandline must be included with
+a C<Content-Disposition: inline> header, and without a filename.
 If this option is not specified, all parts of the message will be included
 with C<Content-Disposition: attachment> and a specified filename.
+
+If the first attachment is of type I<text/*> and the characterset is
+US-ASCII, then it will be attached using 7bit-encoding.
+
+Note that it is likely that e-mail clients will support this format
+only for files of type I<text/*>.
 
 The option B<-a> takes precedence over B<-i>.
 
@@ -1630,10 +1685,6 @@ The multipart/related Content-Type
 
 Content-ID and Message-ID URLs
 
-=item RFC 2822:
-
-Internet Message Format
-
 =item RFC 4648:
 
 The Base16, Base32, and Base64 Data Encodings
@@ -1653,6 +1704,7 @@ RFC 1522 (obsolete): MIME Part Two: Message Header Extensions for Non-ASCII Text
 RFC 2184 (obsolete): MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 RFC 2231: MIME Parameter Value and Encoded Word Extensions: Character Sets, Languages, and Continuations
 RFC 2646 (obsolete): The Text/Plain Format Parameter
+RFC 2822 (obsolete): Internet Message Format
 RFC 3676: The Text/Plain Format and DelSp Parameters
 RFC 4021: Registration of Mail and MIME Header Fields
 

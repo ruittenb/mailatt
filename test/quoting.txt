@@ -1,0 +1,42 @@
+
+fixed @ 120:
+
+There are those who believe that life here began out there, far across the universe.
+With tribes of humans who may have been the forefathers of the Egyptians, or the Toltecs, or the Mayans.
+That they may have been the architects of the Great Pyramids, or the lost civilizations of Lemuria, or Atlantis.
+Some believe that there may yet be brothers of man, who even now fight to survive... somewhere beyond the heavens.
+
+
+fixed @ 80:
+
+There are those who believe that life here began out there, far across the unive
+rse.
+With tribes of humans who may have been the forefathers of the Egyptians, or the
+ Toltecs, or the Mayans.
+That they may have been the architects of the Great Pyramids, or the lost civili
+zations of Lemuria, or Atlantis.
+Some believe that there may yet be brothers of man, who even now fight to surviv
+e... somewhere beyond the heavens.
+
+
+flowed:
+
+There are those who believe that life here began out there, far across the
+universe.  With tribes of humans who may have been the forefathers of the
+Egyptians, or the Toltecs, or the Mayans.  That they may have been the
+architects of the Great Pyramids, or the lost civilizations of Lemuria, or
+Atlantis.  Some believe that there may yet be brothers of man, who even now
+fight to survive... somewhere beyond the heavens.
+
+
+embarrassing:
+
+>>>>>>This is a comment from the first message to show a
+>quoting example.
+>>>>>This is a comment from the second message to show a
+>quoting example.
+>>>>This is a comment from the third message.
+>>>This is a comment from the fourth message.
+
+
+
