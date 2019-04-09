@@ -254,11 +254,15 @@ problems are encountered.
 Specifies that the first attachment must be attached with the
 \&\fBformat=flowed\fR parameter. This signals to e\-mail clients that the
 text may be flowed by paragraph and quotations may be rendered in a
-more legible way, e.g. with quote bars.  This prevents incorrect
+more legible way, e.g. with quote bars.  This also prevents incorrect
 parsing of \fB>\fR characters at the start of lines.
 .Sp
 This is probably only useful in combination with \fB\-i\fR and a
 \&\fItext/plain\fR attachment.
+.Sp
+Use this option for best legibility, and if preservation of the
+formatting is of less concern. Not using this option will preserve
+formatting, possibly at the expense of legibility.
 .Sp
 See also \fB\-i\fR.
 .IP "\-H \fIheaderline\fR" 4

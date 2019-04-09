@@ -1,4 +1,4 @@
-#!/usr/bin/env ksh
+#!/usr/bin/env bash
 #
 ############################################################################
 #
@@ -22,6 +22,8 @@
 #		bug: check difference between 8bit and binary encodings
 #			https://tools.ietf.org/html/rfc6152
 #			https://tools.ietf.org/html/rfc3030
+#		we might be able to replace f_adjust_linelen with:
+#			cut -f2- -d" " | xargs -n 30
 #
 
 # The main program code starts at the label '# main'
@@ -1354,11 +1356,15 @@ problems are encountered.
 Specifies that the first attachment must be attached with the
 B<format=flowed> parameter. This signals to e-mail clients that the
 text may be flowed by paragraph and quotations may be rendered in a
-more legible way, e.g. with quote bars.  This prevents incorrect
+more legible way, e.g. with quote bars.  This also prevents incorrect
 parsing of B<E<gt>> characters at the start of lines.
 
 This is probably only useful in combination with B<-i> and a
 I<text/plain> attachment.
+
+Use this option for best legibility, and if preservation of the
+formatting is of less concern. Not using this option will preserve
+formatting, possibly at the expense of legibility.
 
 See also B<-i>.
 
