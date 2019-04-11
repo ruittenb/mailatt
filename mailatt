@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.24
+# Version:	1.25
 # Created:	2011-02-11
 # Date:		2019-04-06
 # Author:	Rene Uittenbogaard
@@ -16,14 +16,11 @@
 #		mailatt { -h | -v }
 #
 # TODO:
-#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy
-#		examine: RFC 3676: The Text/Plain Format and DelSp Parameters
 #		bug: darwin user database may contain non-ascii characters
+#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy
 #		bug: check difference between 8bit and binary encodings
 #			https://tools.ietf.org/html/rfc6152
 #			https://tools.ietf.org/html/rfc3030
-#		we might be able to replace f_adjust_linelen with:
-#			cut -f2- -d" " | xargs -n 30
 #
 
 # The main program code starts at the label '# main'
@@ -37,7 +34,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.24
+.ds Vw @(#) mailatt 1.25
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -247,7 +244,7 @@ f_encode_header() {
 	if [ "$(f_lowercase $charset)" = us-ascii ]; then
 		f_echo "$line" | fmt -w 70
 	else
-		f_echon "$line" | f_bytedump | f_adjust_linelen 39 | $awk 'NF > 1 { print }' | while read header_line;
+		f_echon "$line" | f_bytedump | f_adjust_linelen 39 | while read header_line;
 		do
 			encoded="$(f_echon "$header_line" | $header_encoder 1)"
 			f_echo "=?${charset}?${header_encoding}?${encoded}?="
@@ -360,8 +357,8 @@ f_base64encode_bytes() {
 			bufindex = 1
 			set = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 		}
-		NF > 1 {
-			for (i = 2; i <= NF; i++) store($i)
+		{
+			for (i = 1; i <= NF; i++) store($i)
 			flush()
 		}
 	'
@@ -414,9 +411,9 @@ f_uuencode_bytes() {
 			cset = " !\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`"
 			lset = "`!\"#$%&'\''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
 		}
-		NF > 1 {
-			printf(len(NF - 1))
-			for (i = 2; i <= NF; i++) store($i)
+		{
+			printf(len(NF))
+			for (i = 1; i <= NF; i++) store($i)
 			flush()
 		}
 	'
@@ -443,9 +440,9 @@ f_qpencode_bytes() {
 	#    Debian 3.0
 	#    Darwin 17.7.0
 	$awk -v inheader="$1" -v linefeed="$2" '
-		NF > 1 {
+		{
 			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
-			for (i = 2; i <= NF; i++) {
+			for (i = 1; i <= NF; i++) {
 				# normal ascii, but not space or equals sign (61)
 				if (($i > 32) && ($i != 61) && ($i < 127))                 printf("%c", $i)
 				# space, if not in header and not the first or last char on line
@@ -497,31 +494,19 @@ f_qpencode_file_linewise() {
 # Extend the hexdump/octal dump output to contain a certain number of fields
 # per line. This will correspond to the number of characters per line after
 # encoding.
+# Also, the first column (offset) is removed.
 #
-# @param {int} new number of byte fields per line, not counting the first
-# ('offset') field
+# @param {int} new number of byte fields per line
 #
 f_adjust_linelen() {
-	$awk -v maxfields="${1:-18}" '
-		BEGIN {
-			r = 0
-			# the first field is not accurate any more,
-			# but it is discarded by f_*encode_line anyway
-			printf("0000000")
-		}
-		{
-			for (i = 2; i <= NF; i++) {
-				printf(" %3d", $i)
-				if (++r >= maxfields) {
-					r = 0
-					printf("\n%s", "0000000")
-				}
-			}
-		}
-		END {
-			printf("\n")
-		}
-	'
+	# According to manpages, this should work on:
+	#    HP-UX 11.11
+	#    AIX 7.2
+	#    Solaris 11
+	#    Darwin 17.7.0
+	#    FreeBSD
+	typeset maxfields="${1:-18}"
+	cut -f2- -d" " | xargs -n $maxfields
 }
 
 #
@@ -870,6 +855,7 @@ f_mime_identify() {
 		csh)		echo a text/x-csh				;;
 		css)		echo a text/css					;;
 		deb)		echo b application/x-deb			;;
+		depot)		echo b application/hp_depot			;;
 		der) 		echo a application/x-x509-ca-cert		;;
 		dia)		echo b application/x-dia-diagram		;;
 		dll)		echo b application/octet-stream			;;
