@@ -45,7 +45,7 @@ test: $(PROG) ## Run simple tests
 
 .PHONY: install
 install: $(PROG) ## Copy script and manpage to system directories
-	./install.sh
+	./install.sh $(PROG) $(SECTION)
 
 .PHONY: bump-patchlevel
 bump-patchlevel: ## increment the script version by 0.0.1

@@ -62,28 +62,22 @@ install() {
 }
 
 main() {
-	progname="${1%%-*}"
+	typeset progname="$1"
+	typeset section="$2"
+	if [ "`uname`" = HP-UX -o "`uname`" = SunOS ] && [ "$section" = 8 ]; then
+		section=1m
+	fi
 	askprefix
 	findmangroup
-	echo "making appropriate directories under $PREFIX .."
-	test -d $PREFIX/bin      || mkdir -p -m 775 $PREFIX/bin
-	test -d $PREFIX/man/man1 || mkdir -p -m 775 $PREFIX/man/man1
-	echo "installing main script.."
-	install -m 775 -o root -g bin "$1" $PREFIX/bin
-	install -l "$1" $PREFIX/bin/$progname
-	echo "installing user manpage.."
-	install -m 664 -o root -g "$mangroup" $progname.1 $PREFIX/man/man1
-	if [ -f "$progname.1m" -o -f "$progname.8" ]; then
-		echo "installing sysadmin manpage.."
-		if [ "`uname`" = HP-UX -o "`uname`" = SunOS ]; then
-			test -d $PREFIX/man/man1m || mkdir -p -m 775 $PREFIX/man/man1m
-			install -m 664 -o root -g "$mangroup" $progname.1m $PREFIX/man/man1m/
-		else # Linux
-			test -d $PREFIX/man/man8  || mkdir -p -m 775 $PREFIX/man/man8
-			install -m 664 -o root -g "$mangroup" $progname.8 $PREFIX/man/man8/
-		fi
-	fi
+	echo "Making appropriate directories under $PREFIX ..."
+	test -d $PREFIX/bin             || mkdir -p -m 775 $PREFIX/bin
+	test -d $PREFIX/man/man$section || mkdir -p -m 775 $PREFIX/man/man$section
+	echo "Installing main script..."
+	install -m 775 -o root -g bin "$progname" $PREFIX/bin
+	echo "Installing user manpage..."
+	install -m 664 -o root -g "$mangroup" $progname.$section $PREFIX/man/man$section
+	echo "Done."
 }
 
-main $(basename $(pwd))
+main "$@"
 
