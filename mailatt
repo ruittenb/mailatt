@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.25
+# Version:	1.25.1
 # Created:	2011-02-11
 # Date:		2019-04-06
 # Author:	Rene Uittenbogaard
@@ -16,9 +16,8 @@
 #		mailatt { -h | -v }
 #
 # TODO:
-#		bug: darwin user database may contain non-ascii characters
-#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy
-#		bug: check difference between 8bit and binary encodings
+#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy;
+#		     check difference between 8bit and binary encodings
 #			https://tools.ietf.org/html/rfc6152
 #			https://tools.ietf.org/html/rfc3030
 #
@@ -34,7 +33,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.25
+.ds Vw @(#) mailatt 1.25.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -110,32 +109,41 @@ f_version() {
 	f_echo "$version" | $awk '/@[(]#[)]/ { sub(".*@[(]#[)] ?", ""); print }'
 }
 
-f_getusername() {
-	login="$1"
-	# find name from password file (GCOS field) or NIS
-	{
-		# Is NIS active? Then give it preference over local passwd
-		if f_has domainname && test "`domainname 2>/dev/null`"; then
-			ypmatch "$login" passwd 2>/dev/null
-		fi
-		# Always consult local passwd
-		cat /etc/passwd
-		# MacOS/Darwin user database
-		if [ `uname` == Darwin ]; then
-			dscl . -read /Users/"$login" RealName | $awk -v login="$login" '
-			!/^RealName:/ {
-				sub(/^[ \t]*/, "")
-				realname = $0
+f_getrealname() {
+	typeset login="$1"
+	typeset realname="$(
+		# find name from password file (GECOS field) or NIS
+		{
+			# Is NIS active? Then give it preference over local passwd
+			if f_has domainname && test "`domainname 2>/dev/null`"; then
+				ypmatch "$login" passwd 2>/dev/null
+			fi
+			# Always consult local passwd
+			cat /etc/passwd
+		} | $awk -F: -v login="$login" '
+			$1 == login {
+				sub(/,.*/, "", $5); print $5
 			}
-			END {
-				print login ":*:-1:-1:" realname ":/tmp:/usr/bin/false"
-			}'
+		' | head -1
+	)"
+	# MacOS/Darwin user database
+	if [ -z "$realname" -a `uname` == Darwin ]; then
+		dsclname=$(dscl . -read /Users/"$login" RealName 2>/dev/null)
+		if [ $? -eq 0 ]; then
+			realname="$(
+				echo "$dsclname" | $awk -v login="$login" '
+					!/^RealName:/ {
+						sub(/^[ \t]*/, "")
+						realname = $0
+					}
+					END {
+						print realname
+					}
+				'
+			)"
 		fi
-	} | $awk -F: -v login="$login" '
-		$1 == login {
-			sub(/,.*/, "", $5); print $5
-		}
-	' | head -1
+	fi
+	echo "$realname"
 }
 
 f_notify_if_interactive() {
@@ -145,6 +153,28 @@ f_notify_if_interactive() {
 f_lowercase() {
 	# tr '[:upper:]' '[:lower:]' # needs LC_CTYPE to function correctly
 	f_echo "$@" | tr A-Z a-z
+}
+
+#
+# Takes text from stdin and reflects in its return value whether the
+# text contains non-ASCII characters.
+#
+# @returns 0 if there are non-ASCII characters
+#          1 if there are only ASCII characters
+#
+f_contains_non_ascii() {
+	$awk '
+		BEGIN {
+			re = sprintf("[%c-%c]", 128, 255)
+			found = 0
+		}
+		$0 ~ re {
+			found++
+		}
+		END {
+			exit !found
+		}
+	'
 }
 
 f_has() {
@@ -239,16 +269,29 @@ f_hanging_indent() {
 	'
 }
 
+#
+# Takes text from stdin and encodes it according to the current
+# values of $charset and $header_encoding
+#
 f_encode_header() {
+	f_bytedump | f_adjust_linelen 39 | while read header_line;
+	do
+		encoded="$(f_echon "$header_line" | $header_encoder 1)"
+		f_echo "=?${charset}?${header_encoding}?${encoded}?="
+	done
+}
+
+f_smart_encode_header() {
 	typeset line="$1"
-	if [ "$(f_lowercase $charset)" = us-ascii ]; then
-		f_echo "$line" | fmt -w 70
+	if [ "$(f_lowercase $charset)" != us-ascii ]; then
+		f_echon "$line" | f_encode_header
+	elif echo "$line" | f_contains_non_ascii; then
+		# if $charset is 'ascii' but line contains non-ascii characters
+		charset=utf-8
+		f_echon "$line" | f_encode_header
+		charset=us-ascii
 	else
-		f_echon "$line" | f_bytedump | f_adjust_linelen 39 | while read header_line;
-		do
-			encoded="$(f_echon "$header_line" | $header_encoder 1)"
-			f_echo "=?${charset}?${header_encoding}?${encoded}?="
-		done
+		f_echo "$line" | fmt -w 70
 	fi | f_hanging_indent
 }
 
@@ -272,9 +315,9 @@ f_add_address() {
 		fullname=
 	fi
 	if [ "${addr#*@}" = "$addr" -a -z "$fullname" ]; then
-		fullname="$(f_getusername "$addr")"
+		fullname="$(f_getrealname "$addr")"
 	fi
-	addressline="${addressline:+$addressline,\n\t}${fullname:+$(f_encode_header "$fullname") }<$addr>"
+	addressline="${addressline:+$addressline,\n\t}${fullname:+$(f_smart_encode_header "$fullname") }<$addr>"
 }
 
 f_add_addresses() {
@@ -1164,7 +1207,7 @@ while getopts "8C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 		i)	inline_or_attachment=inline
 			specify_inline_filename=
 			;;
-		s)	subject="Subject: $(f_encode_header "$OPTARG")"
+		s)	subject="Subject: $(f_smart_encode_header "$OPTARG")"
 			;;
 		v)	f_version
 			exit 0
