@@ -24,8 +24,8 @@ BODY_RUS_QP='^=F3=CC=C1=D7=D8=D3=D1'
 BODY_RUS_MM=A2iDOxdLV28
 BODY_PNG_MM=^iVBORw0KGgo
 BODY_PNG_QP=^=89PNG=0D=0A=1A=0A=
-CHARSET=ISO-8859-15
-CHARSET2=KOI8-R
+CHARSET_ISO=ISO-8859-15
+CHARSET_RUS=KOI8-R
 
 let num=0
 
@@ -126,11 +126,11 @@ run_message_tests() {
 		'^1$' \
 		< <(echo | $PROG -d -i - test/ascii.txt | grep -c '^Content-Disposition: inline')
 	run_test "content-transfer-encoding: quoted-printable can be set to for a header line" \
-		'^To: =\?'"$CHARSET"'\?Q\?Recipient\?= ' \
-		< <($PROG -d -C $CHARSET -q -r "$TO")
+		'^To: =\?'"$CHARSET_ISO"'\?Q\?Recipient\?= ' \
+		< <($PROG -d -C $CHARSET_ISO -q -r "$TO")
 	run_test "content-transfer-encoding: base64 can be set for a header line" \
-		'^To: =\?'"$CHARSET"'\?B\?UmVjaXBpZW50\?= ' \
-		< <($PROG -d -C $CHARSET -m -r "$TO")
+		'^To: =\?'"$CHARSET_ISO"'\?B\?UmVjaXBpZW50\?= ' \
+		< <($PROG -d -C $CHARSET_ISO -m -r "$TO")
 }
 
 # Run all header options tests
@@ -190,37 +190,44 @@ run_header_tests() {
 		"^\t.*$SUBJECT3" \
 		< <($PROG -d -u -s "$SUBJECT $SUBJECT2 $SUBJECT3")
 
-	run_test "short $CHARSET subject, default encoding" \
-		'^Subject: =\?'"${CHARSET}"'\?Q\?' \
-		< <($PROG -d -C $CHARSET -s "$SUBJECT_ISO")
-	run_test "short $CHARSET subject, quoted-printable encoding" \
-		'^Subject: =\?'"${CHARSET}"'\?Q\?' \
-		< <($PROG -d -q -C $CHARSET -s "$SUBJECT_ISO")
-	run_test "short $CHARSET subject, base64 encoding" \
-		'^Subject: =\?'"${CHARSET}"'\?B\?' \
-		< <($PROG -d -m -C $CHARSET -s "$SUBJECT_ISO")
-	run_test "short $CHARSET subject, 8bit encoding" \
-		'^Subject: =\?'"${CHARSET}"'\?B\?' \
-		< <($PROG -d -8 -C $CHARSET -s "$SUBJECT_ISO")
-	run_test "short $CHARSET subject, uuencoding" \
-		'^Subject: =\?'"${CHARSET}"'\?B\?' \
-		< <($PROG -d -u -C $CHARSET -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, ascii charset, quoted-printable encoding" \
+		'^Subject: =\?utf-8\?Q\?' \
+		< <($PROG -d -q -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, ascii charset, base64 encoding" \
+		'^Subject: =\?utf-8\?B\?' \
+		< <($PROG -d -m -s "$SUBJECT_ISO")
 
-	run_test "long $CHARSET subject, default encoding" \
-		"^\t.*=?${CHARSET}?Q?" \
-		< <($PROG -d -C $CHARSET -s "$SUBJECT2_ISO")
-	run_test "long $CHARSET subject, quoted-printable encoding" \
-		"^\t.*=?${CHARSET}?Q?" \
-		< <($PROG -d -q -C $CHARSET -s "$SUBJECT2_ISO")
-	run_test "long $CHARSET subject, base64 encoding" \
-		"^\t.*=?${CHARSET}?B?" \
-		< <($PROG -d -m -C $CHARSET -s "$SUBJECT2_ISO")
-	run_test "long $CHARSET subject, 8bit encoding" \
-		"^\t.*=?${CHARSET}?B?" \
-		< <($PROG -d -8 -C $CHARSET -s "$SUBJECT2_ISO")
-	run_test "long $CHARSET subject, uuencoding" \
-		"^\t.*=?${CHARSET}?B?" \
-		< <($PROG -d -u -C $CHARSET -s "$SUBJECT2_ISO")
+	run_test "short $CHARSET_ISO subject, default encoding" \
+		'^Subject: =\?'"${CHARSET_ISO}"'\?Q\?' \
+		< <($PROG -d -C $CHARSET_ISO -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, quoted-printable encoding" \
+		'^Subject: =\?'"${CHARSET_ISO}"'\?Q\?' \
+		< <($PROG -d -q -C $CHARSET_ISO -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, base64 encoding" \
+		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
+		< <($PROG -d -m -C $CHARSET_ISO -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, 8bit encoding" \
+		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
+		< <($PROG -d -8 -C $CHARSET_ISO -s "$SUBJECT_ISO")
+	run_test "short $CHARSET_ISO subject, uuencoding" \
+		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
+		< <($PROG -d -u -C $CHARSET_ISO -s "$SUBJECT_ISO")
+
+	run_test "long $CHARSET_ISO subject, default encoding" \
+		"^\t.*=?${CHARSET_ISO}?Q?" \
+		< <($PROG -d -C $CHARSET_ISO -s "$SUBJECT2_ISO")
+	run_test "long $CHARSET_ISO subject, quoted-printable encoding" \
+		"^\t.*=?${CHARSET_ISO}?Q?" \
+		< <($PROG -d -q -C $CHARSET_ISO -s "$SUBJECT2_ISO")
+	run_test "long $CHARSET_ISO subject, base64 encoding" \
+		"^\t.*=?${CHARSET_ISO}?B?" \
+		< <($PROG -d -m -C $CHARSET_ISO -s "$SUBJECT2_ISO")
+	run_test "long $CHARSET_ISO subject, 8bit encoding" \
+		"^\t.*=?${CHARSET_ISO}?B?" \
+		< <($PROG -d -8 -C $CHARSET_ISO -s "$SUBJECT2_ISO")
+	run_test "long $CHARSET_ISO subject, uuencoding" \
+		"^\t.*=?${CHARSET_ISO}?B?" \
+		< <($PROG -d -u -C $CHARSET_ISO -s "$SUBJECT2_ISO")
 }
 
 # Run all attachment header tests
@@ -296,17 +303,17 @@ run_attachment_tests() {
 		< <($PROG -d test/ascii.txt)
 	run_test 'filename is reported correctly for file attachment in iso charset' \
 		'^Content-Type: text/plain;.* name="ascii.txt"' \
-		< <($PROG -d -C $CHARSET test/ascii.txt)
+		< <($PROG -d -C $CHARSET_ISO test/ascii.txt)
 
 	run_test 'charset is reported correctly for file attachment in ascii charset' \
 		'^Content-Type: text/plain; charset="us-ascii"' \
 		< <(echo "$BODY_ASC" | $PROG -d -i -)
 	run_test 'charset is reported correctly for file attachment in iso charset' \
-		'^Content-Type: text/plain; charset="'$CHARSET'"' \
-		< <($PROG -d -C $CHARSET test/ascii.txt)
+		'^Content-Type: text/plain; charset="'$CHARSET_ISO'"' \
+		< <($PROG -d -C $CHARSET_ISO test/ascii.txt)
 	run_test 'charset is reported correctly for file attachment in russian charset' \
-		'^Content-Type: text/plain; charset="'$CHARSET2'"' \
-		< <($PROG -d -C $CHARSET2 test/ascii.txt)
+		'^Content-Type: text/plain; charset="'$CHARSET_RUS'"' \
+		< <($PROG -d -C $CHARSET_RUS test/ascii.txt)
 }
 
 # Run all body tests
@@ -317,10 +324,10 @@ run_body_tests() {
 		< <(echo "$BODY_ASC" | $PROG -d -i -)
 	run_test 'can attach a text part in the russian characterset, quoted-printable' \
 		"$BODY_RUS_QP" \
-		< <($PROG -d -i -q -C $CHARSET2 test/koi8-r.txt)
+		< <($PROG -d -i -q -C $CHARSET_RUS test/koi8-r.txt)
 	run_test 'can attach a text part in the russian characterset, base64' \
 		"$BODY_RUS_MM" \
-		< <($PROG -d -i -m -C $CHARSET2 test/koi8-r.txt)
+		< <($PROG -d -i -m -C $CHARSET_RUS test/koi8-r.txt)
 	run_test 'can attach a binary part, base64' \
 		"$BODY_PNG_MM" \
 		< <($PROG -d -m test/tick.png)
