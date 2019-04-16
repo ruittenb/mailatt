@@ -129,13 +129,13 @@
 .\" ========================================================================
 .\"
 .IX Title "mailatt 1"
-.TH mailatt 1 "2019-04-11" " " " "
+.TH mailatt 1 "2019-04-16" " " " "
 .\" For nroff, turn off justification.  Always turn off hyphenation; it makes
 .\" way too many mistakes in technical documents.
 .if n .ad l
 .nh
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.26
+.ds Vw @(#) mailatt 1.26.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -166,7 +166,7 @@ mailatt \- send e\-mail with attachments
 .IX Item "Encoding options:"
 \&\f(CW\*(C`[\ \-C\ \*(C'\fR\fIcharset\fR\f(CW\*(C`\ ]\*(C'\fR
 \&\f(CW\*(C`[\ \-M\ \*(C'\fR\fImime-type\fR\f(CW\*(C`\ ]\*(C'\fR
-\&\f(CW\*(C`[\ \-8mqu\ ]\*(C'\fR
+\&\f(CW\*(C`[\ \-mqu\ ]\*(C'\fR
 .IP "Debug options:" 4
 .IX Item "Debug options:"
 \&\f(CW\*(C`[\ \-DVd\ ]\*(C'\fR
@@ -215,16 +215,6 @@ integrity to some extent.  Attachments of types \fImessage/*\fR or
 disallows it.  See also the \fB\-D\fR option.
 .SH "OPTIONS"
 .IX Header "OPTIONS"
-.IP "\-8" 4
-.IX Item "-8"
-This option may be used multiple times, and in any position on the commandline.
-It indicates that \fB8bit\fR should be used as Content-Transfer-Encoding
-for all subsequent attachments (header lines will be base64\-encoded).
-.Sp
-\&\fBWarning\fR: not all e\-mail clients support this.  The use of this option
-is therefore discouraged; use \fB\-m\fR instead.
-.Sp
-See also \fB\-m\fR and \fB\-q\fR.
 .IP "\-C \fIcharset\fR" 4
 .IX Item "-C charset"
 This option may be used multiple times, and in any position on the

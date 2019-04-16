@@ -3,23 +3,17 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.26
+# Version:	1.26.1
 # Created:	2011-02-11
-# Date:		2019-04-06
+# Date:		2019-04-16
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
 #			[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]
 #			[ -s <subject> ] [ -H <headerline> ]
-#			[ -C <charset> ] [ -M mimetype ] [ -8mqu ]
+#			[ -C <charset> ] [ -M mimetype ] [ -mqu ]
 #			[ <file1> .. <filen> ]
 #		mailatt { -h | -v }
-#
-# TODO:
-#		bug: 8BIT, 8BITMIME and BINARY encodings are probably buggy;
-#		     check difference between 8bit and binary encodings
-#			https://tools.ietf.org/html/rfc6152
-#			https://tools.ietf.org/html/rfc3030
 #
 
 # The main program code starts at the label '# main'
@@ -33,7 +27,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.26
+.ds Vw @(#) mailatt 1.26.1
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -50,7 +44,6 @@ f_initialize() {
 	f_find_cid_data
 	f_find_md5sum
 	f_select_encoder init
-	#source mime-identify ''
 	attno=0
 	flowed=
 	mimetype=
@@ -100,7 +93,7 @@ f_echon() {
 f_usage() {
 	f_echo "Usage: $argv0\t[ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]"
 	f_echo "\t\t[ -b <bcc-addr> ] [ -f <from> ] [ -R <reply-to> ]"
-	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -8mqu ]"
+	f_echo "\t\t[ -s <subject> ] [ -H <headerline> ] [ -mqu ]"
 	f_echo "\t\t[ -C <charset> ] [ -M <mime-type> ] [ <file1> .. <filen> ]"
 	f_echo "       $argv0\t{ -h | -v }"
 }
@@ -597,13 +590,6 @@ f_select_encoder() {
 			header_encoding=Q
 			header_encoder=f_qpencode_bytes
 			;;
-		8)	bin_encoding=8bit
-			bin_encoder=cat
-			asc_encoding=8bit
-			asc_encoder=cat
-			header_encoding=B
-			header_encoder=f_base64encode_bytes
-			;;
 		init)	bin_encoding=base64
 			bin_encoder=f_base64encode_file
 			asc_encoding=quoted-printable
@@ -629,6 +615,7 @@ f_startmail() {
 	cat <<-_MIME_header_preamble_
 		MIME-Version: 1.0
 		Content-Type: multipart/$mixed_or_alternative; boundary="$boundary"
+		Content-Transfer-Encoding: 8bitmime
 		X-Mailer: $(f_version)
 		
 		This is a multipart message in MIME format.
@@ -645,7 +632,7 @@ f_sendmail() {
 	f_onlcr | if [ -n "${MAILATT_DEBUG#0}" ]; then
 		cat
 	else
-		sendmail -t -i $envelope_from
+		sendmail -B 8bitmime -t -i $envelope_from
 	fi
 }
 
@@ -820,7 +807,7 @@ f_process_all_files() {
 					mimetype_coming_up=1
 				fi
 				continue
-			elif [ "x${opt#-[muq8]}" != "x$opt" ]; then
+			elif [ "x${opt#-[muq]}" != "x$opt" ]; then
 				f_select_encoder ${opt#-}
 				continue
 			elif [ "x$opt" = x-- ]; then
@@ -1170,7 +1157,7 @@ f_mime_identify() {
 f_initialize "${argv0:=$(basename $0)}"
 
 # not all shells support executing 'getopts' inside a function
-while getopts "8C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
+while getopts "C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 	case $currentopt in
 		C)	charset="$OPTARG"
 			;;
@@ -1197,7 +1184,7 @@ while getopts "8C:DFH:IM:R:Vab:c:df:himqr:s:uv" currentopt; do
 			;;
 		d)	: ${MAILATT_DEBUG:=1}
 			;;
-		[muq8])	f_select_encoder $currentopt
+		[muq])	f_select_encoder $currentopt
 			;;
 		[bcfrR]) f_add_addresses "$OPTARG"
 			;;
@@ -1271,7 +1258,7 @@ S<<  C<[ -H >I<headerline>C< ]>           >>
 
 S<<  C<[ -C >I<charset>C< ]>              >>
 S<<  C<[ -M >I<mime-type>C< ]>            >>
-S<<  C<[ -8mqu ]>                         >>
+S<<  C<[ -mqu ]>                          >>
 
 =item Debug options:
 
@@ -1344,17 +1331,6 @@ disallows it.  See also the B<-D> option.
 =head1 OPTIONS
 
 =over 4
-
-=item -8
-
-This option may be used multiple times, and in any position on the commandline.
-It indicates that B<8bit> should be used as Content-Transfer-Encoding
-for all subsequent attachments (header lines will be base64-encoded).
-
-B<Warning>: not all e-mail clients support this.  The use of this option
-is therefore discouraged; use B<-m> instead.
-
-See also B<-m> and B<-q>.
 
 =item -C I<charset>
 
