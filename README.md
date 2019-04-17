@@ -16,7 +16,7 @@ make shebang
 ## Example:
 
 ```
-mailatt -i −s 'Filesystem usage' −r sysadmin@domain.nl message.html fsgraph−*.eps
+mailatt -i −s 'Filesystem usage' −r sysadmin@domain.nl message.html fsgraph−*.pdf
 ```
 
 ## Installing:
