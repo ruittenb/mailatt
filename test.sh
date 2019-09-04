@@ -167,9 +167,6 @@ run_header_tests() {
 	run_test 'short ASCII subject, base64 encoding' \
 		"^Subject: $SUBJECT" \
 		< <($PROG -d -m -s "$SUBJECT")
-	run_test 'short ASCII subject, 8bit encoding' \
-		"^Subject: $SUBJECT" \
-		< <($PROG -d -8 -s "$SUBJECT")
 	run_test 'short ASCII subject, uuencoding' \
 		"^Subject: $SUBJECT" \
 		< <($PROG -d -u -s "$SUBJECT")
@@ -183,9 +180,6 @@ run_header_tests() {
 	run_test 'long ASCII subject, base64 encoding' \
 		"^\t.*$SUBJECT3" \
 		< <($PROG -d -m -s "$SUBJECT $SUBJECT2 $SUBJECT3")
-	run_test 'long ASCII subject, 8bit encoding' \
-		"^\t.*$SUBJECT3" \
-		< <($PROG -d -8 -s "$SUBJECT $SUBJECT2 $SUBJECT3")
 	run_test 'long ASCII subject, uuencoding' \
 		"^\t.*$SUBJECT3" \
 		< <($PROG -d -u -s "$SUBJECT $SUBJECT2 $SUBJECT3")
@@ -206,9 +200,6 @@ run_header_tests() {
 	run_test "short $CHARSET_ISO subject, base64 encoding" \
 		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
 		< <($PROG -d -m -C $CHARSET_ISO -s "$SUBJECT_ISO")
-	run_test "short $CHARSET_ISO subject, 8bit encoding" \
-		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
-		< <($PROG -d -8 -C $CHARSET_ISO -s "$SUBJECT_ISO")
 	run_test "short $CHARSET_ISO subject, uuencoding" \
 		'^Subject: =\?'"${CHARSET_ISO}"'\?B\?' \
 		< <($PROG -d -u -C $CHARSET_ISO -s "$SUBJECT_ISO")
@@ -222,9 +213,6 @@ run_header_tests() {
 	run_test "long $CHARSET_ISO subject, base64 encoding" \
 		"^\t.*=?${CHARSET_ISO}?B?" \
 		< <($PROG -d -m -C $CHARSET_ISO -s "$SUBJECT2_ISO")
-	run_test "long $CHARSET_ISO subject, 8bit encoding" \
-		"^\t.*=?${CHARSET_ISO}?B?" \
-		< <($PROG -d -8 -C $CHARSET_ISO -s "$SUBJECT2_ISO")
 	run_test "long $CHARSET_ISO subject, uuencoding" \
 		"^\t.*=?${CHARSET_ISO}?B?" \
 		< <($PROG -d -u -C $CHARSET_ISO -s "$SUBJECT2_ISO")
@@ -263,9 +251,6 @@ run_attachment_tests() {
 	run_test 'content-transfer-encoding: can specify base64' \
 		'Transfer-Encoding: base64' \
 		< <($PROG -d -r "$TO" -m test/ascii.txt)
-	run_test 'content-transfer-encoding: can specify 8-bit' \
-		'Transfer-Encoding: 8bit' \
-		< <($PROG -d -r "$TO" -8 test/ascii.txt)
 	run_test 'content-transfer-encoding: can specify uuencode' \
 		'Transfer-Encoding: uuencode' \
 		< <($PROG -d -r "$TO" -u test/ascii.txt)
