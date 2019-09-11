@@ -3,7 +3,7 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.27.1
+# Version:	1.27.2
 # Created:	2011-02-11
 # Date:		2019-04-16
 # Author:	Rene Uittenbogaard
@@ -27,7 +27,7 @@ version='
 
 =for roff
 .ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.27.1
+.ds Vw @(#) mailatt 1.27.2
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -632,7 +632,7 @@ f_sendmail() {
 	f_onlcr | if [ -n "${MAILATT_DEBUG#0}" ]; then
 		cat
 	else
-		sendmail -B 8bitmime -t -i $envelope_from
+		sendmail -B 8BITMIME -t -i $envelope_from
 	fi
 }
 
