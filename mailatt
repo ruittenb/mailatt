@@ -3,9 +3,9 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.27.2
+# Version:	1.27.3
 # Created:	2011-02-11
-# Date:		2019-04-16
+# Date:		2021-12-09
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
@@ -26,8 +26,8 @@ version='
 =pod
 
 =for roff
-.ds Yr 2011-2019
-.ds Vw @(#) mailatt 1.27.2
+.ds Yr 2011-2021
+.ds Vw @(#) mailatt 1.27.3
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -463,7 +463,9 @@ f_uuencode_bytes() {
 #		0:  \n      for most legible representation of text files
 #		1:  =0A=\n  for byte-true encoding of text files
 #		2:  =0A     for byte-true encoding of binaries
+#
 # Note that right before sending, all line endings will be converted to \r\n
+# as required by RFC 5322.
 #
 f_qpencode_bytes() {
 	# Tested on:
@@ -1302,9 +1304,11 @@ types:
 
 =item -
 
-Files of type I<text/*> and those that are known to be ASCII-only (like many
-script types) will be attached using quoted-printable encoding by default
-(but see also the B<-m> and B<-i> options below).
+Files of type I<text/*> and those that are known to be (mostly) ASCII-only,
+like I<e.g.> many script types, will be attached using quoted-printable encoding
+by default (but see also the B<-m> and B<-i> options below). Note however,
+that this is only done for readability, and that B<mailatt>'s implementation
+of this encoding is binary-safe.
 
 =item -
 
@@ -1749,4 +1753,6 @@ C<mailatt> is distributed without any warranty, even without the
 implied warranties of merchantability or fitness for a particular purpose.
 
 =cut
+
+# vim: set ts=8 sw=8:
 
