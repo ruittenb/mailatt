@@ -260,6 +260,12 @@ run_attachment_tests() {
 	run_test 'specifies the correct uuencode mode line for non-executable files' \
 		'^begin 644 ascii.txt' \
 		< <($PROG -d -r "$TO" -u test/ascii.txt)
+	run_test 'specifies the correct uuencode second-to-last line' \
+		"^\`\r$" \
+		< <($PROG -d -r "$TO" -u test/ascii.txt)
+	run_test 'specifies the correct uuencode last line' \
+		"^end\r$" \
+		< <($PROG -d -r "$TO" -u test/ascii.txt)
 
 	run_test 'content-type: text/plain is the default for stdin attachment in 1st place' \
 		'^Content-Type: text/plain' \
@@ -304,13 +310,13 @@ run_attachment_tests() {
 # Run all body tests
 #
 run_body_tests() {
-	run_test 'can attach a text part in the ascii characterset, quoted-printable' \
+	run_test 'can attach a text part in the ascii character set, quoted-printable' \
 		"^$BODY_ASC_QP" \
 		< <(echo "$BODY_ASC" | $PROG -d -i -)
-	run_test 'can attach a text part in the russian characterset, quoted-printable' \
+	run_test 'can attach a text part in the russian character set, quoted-printable' \
 		"$BODY_RUS_QP" \
 		< <($PROG -d -i -q -C $CHARSET_RUS test/koi8-r.txt)
-	run_test 'can attach a text part in the russian characterset, base64' \
+	run_test 'can attach a text part in the russian character set, base64' \
 		"$BODY_RUS_MM" \
 		< <($PROG -d -i -m -C $CHARSET_RUS test/koi8-r.txt)
 	run_test 'can attach a binary part, base64' \

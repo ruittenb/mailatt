@@ -3,9 +3,9 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.27.3
+# Version:	1.27.4
 # Created:	2011-02-11
-# Date:		2021-12-09
+# Date:		2022-05-31
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
@@ -26,14 +26,24 @@ version='
 =pod
 
 =for roff
-.ds Yr 2011-2021
-.ds Vw @(#) mailatt 1.27.3
+.ds Yr 2011-2022
+.ds Vw @(#) mailatt 1.27.4
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
 .hy 0 \" hyphenation off \
 
 =cut '
+
+############################################################################
+# constants
+
+ENCODE_FOR_BODY=0
+ENCODE_FOR_HEADER=1
+
+LINEFEED_TEXT_LEGIBLE=0
+LINEFEED_TEXT_BYTE_TRUE=1
+LINEFEED_BINARY_BYTE_TRUE=2
 
 ############################################################################
 # functions
@@ -50,6 +60,7 @@ f_initialize() {
 	charset=us-ascii
 	mixed_or_alternative=mixed
 	inline_or_attachment=attachment
+        RANDOM=`date +%s`
 }
 
 f_setpath() {
@@ -143,9 +154,9 @@ f_notify_if_interactive() {
 	test -t 0 && f_echo "Reading document from stdin..." 1>&2
 }
 
-f_lowercase() {
+f_asc_lowercase() {
 	# tr '[:upper:]' '[:lower:]' # needs LC_CTYPE to function correctly
-	f_echo "$@" | tr A-Z a-z
+	f_echo "$@" | tr A-Z a-z # only support ASCII, which suffices in our use case
 }
 
 #
@@ -185,6 +196,7 @@ f_has() {
 # Changes the variable 'fname' to the new filename.
 #
 f_store_pipe_data() {
+        typeset mktemp_opts old_umask=`umask`
 	if f_has mktemp; then
 		if [ `uname` = HP-UX ]; then
 			mktemp_opts=-c
@@ -194,23 +206,22 @@ f_store_pipe_data() {
 		while [ -z "${fname#-}" -o -f "$fname" ]; do
 			fname=/tmp/mailatt.$RANDOM.$RANDOM.$RANDOM.$RANDOM.$RANDOM
 		done
-		# race condition, unavoidable without mktemp(1)
+                umask 077
 		touch "$fname" && chmod 600 "$fname"
+                umask "${old_umask:-022}"
 	fi
 	f_notify_if_interactive
 	cat > "$fname"
 }
 
 f_boundbits() {
-	echo "$RANDOM $RANDOM * $RANDOM * $$ * 63o p" | dc | $awk 'BEGIN {
+	$awk -v seed="$RANDOM" 'BEGIN {
+                srand(seed);
 		set="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_";
-	}
-	{
-		for (i = 1;i <= NF; i++) {
-			printf(substr(set, $i+1, 1));
+		for (n = 1; n <= 10; n++) {
+                        i = int(rand() * 63);
+			printf(substr(set, i + 1, 1));
 		}
-	}
-	END {
 		print "";
 	}'
 }
@@ -267,7 +278,7 @@ f_hanging_indent() {
 # values of $charset and $header_encoding
 #
 f_encode_header() {
-	f_bytedump | f_adjust_linelen 39 | while read header_line;
+	f_bytedump | f_adjust_line_length 39 | while read header_line;
 	do
 		encoded="$(f_echon "$header_line" | $header_encoder 1)"
 		f_echo "=?${charset}?${header_encoding}?${encoded}?="
@@ -276,7 +287,7 @@ f_encode_header() {
 
 f_smart_encode_header() {
 	typeset line="$1"
-	if [ "$(f_lowercase $charset)" != us-ascii ]; then
+	if [ "$(f_asc_lowercase $charset)" != us-ascii ]; then
 		f_echon "$line" | f_encode_header
 	elif echo "$line" | f_contains_non_ascii; then
 		# if $charset is 'ascii' but line contains non-ascii characters
@@ -345,9 +356,10 @@ f_add_addresses() {
 # Not all systems have mmencode(1) or base64(1); therefore, we'll encode it here.
 # Note: the number of bytes on each line MUST be a multiple of 3
 #
-# This was remotely based on a script by Peter van Eerten (c) March 6 2003
+# This was loosely based on a script by Peter van Eerten (c) March 6 2003
 #
-# @param {int} whether we are encoding a mime part (0) or header field (1)
+# @param {int} - the input should be encoded for a mime part (ENCODE_FOR_BODY)
+#                or header field (ENCODE_FOR_HEADER)
 #
 f_base64encode_bytes() {
 	# Tested on:
@@ -359,7 +371,7 @@ f_base64encode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v inheader="$1" '
+	$awk -v in_header="$1" '
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -372,7 +384,7 @@ f_base64encode_bytes() {
 				if (bufindex == 2) buffer[2] = 0
 				spout(buffer[1], buffer[2], 0)
 			}
-			if (!inheader) printf("\n")
+			if (!in_header) printf("\n")
 		}
 		function spout(byte1, byte2, byte3) {
 			# Create base64 values
@@ -458,11 +470,11 @@ f_uuencode_bytes() {
 #
 # QP-encode the output of the hexdump/octal dump.
 #
-# @param {int} whether we are encoding a mime part (0) or header field (1)
+# @param {int} whether we are encoding a mime part (ENCODE_FOR_BODY) or header field (ENCODE_FOR_HEADER)
 # @param {int} how linefeeds (chr(10)) should be encoded:
-#		0:  \n      for most legible representation of text files
-#		1:  =0A=\n  for byte-true encoding of text files
-#		2:  =0A     for byte-true encoding of binaries
+#	LINEFEED_TEXT_LEGIBLE    :  \n      for most legible representation of text files
+#	LINEFEED_TEXT_BYTE_TRUE  :  =0A=\n  for byte-true encoding of text files
+#	LINEFEED_BINARY_BYTE_TRUE:  =0A     for byte-true encoding of binaries
 #
 # Note that right before sending, all line endings will be converted to \r\n
 # as required by RFC 5322.
@@ -477,16 +489,16 @@ f_qpencode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v inheader="$1" -v linefeed="$2" '
+	$awk -v in_header="$1" -v linefeed="$2" '
 		{
-			if (NR > 1) printf("%s", (inheader ? "\n  " : "=\n"))
+			if (NR > 1) printf("%s", (in_header ? "\n  " : "=\n"))
 			for (i = 1; i <= NF; i++) {
 				# normal ascii, but not space or equals sign (61)
 				if (($i > 32) && ($i != 61) && ($i < 127))                 printf("%c", $i)
 				# space, if not in header and not the first or last char on line
-				else if (($i == 32) && (!inheader) && (i > 2) && (i < NF)) printf(" ")
+				else if (($i == 32) && (!in_header) && (i > 2) && (i < NF)) printf(" ")
 				# if newline, then insert a repesentational line break
-				else if (($i == 10) && (!inheader)) {
+				else if (($i == 10) && (!in_header)) {
 					if (linefeed == 2)                                 printf("=0A")
 					else if (linefeed == 1)                            printf("=0A=\n")
 					# if linefeed == 0 the END block will print a NL
@@ -496,35 +508,35 @@ f_qpencode_bytes() {
 			}
 		}
 		END {
-			if (!inheader) printf("\n")
+			if (!in_header) printf("\n")
 		}
 	'
 }
 
 f_base64encode_file() {
 	# number of fields MUST be a multiple of 3
-	f_bytedump ${1:+"$1"} | f_adjust_linelen 54 | f_base64encode_bytes 0
+	f_bytedump ${1:+"$1"} | f_adjust_line_length 54 | f_base64encode_bytes $ENCODE_FOR_BODY
 }
 
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
 	# number of fields MUST be a multiple of 3
-	f_bytedump ${1:+"$1"} | f_adjust_linelen 45 | f_uuencode_bytes 0 0
-	f_echo "\`\nend"
+	f_bytedump ${1:+"$1"} | f_adjust_line_length 45 | f_uuencode_bytes # 0 0
+	f_echo '`'"\nend"
 }
 
 f_qpencode_file_binary() {
-	f_bytedump ${1:+"$1"} | f_adjust_linelen 26 | f_qpencode_bytes 0 2
+	f_bytedump ${1:+"$1"} | f_adjust_line_length 26 | f_qpencode_bytes $ENCODE_FOR_BODY $LINEFEED_BINARY_BYTE_TRUE
 }
 
 f_qpencode_file_text() {
-	f_bytedump ${1:+"$1"} | f_adjust_linelen 72 | f_qpencode_bytes 0 1
+	f_bytedump ${1:+"$1"} | f_adjust_line_length 72 | f_qpencode_bytes $ENCODE_FOR_BODY $LINEFEED_TEXT_BYTE_TRUE
 }
 
 f_qpencode_file_linewise() {
 	typeset line
 	cat ${1:+"$1"} | while read line; do
-		echo "$line" | f_bytedump | f_adjust_linelen 800 | f_qpencode_bytes 0 0
+		echo "$line" | f_bytedump | f_adjust_line_length 800 | f_qpencode_bytes $ENCODE_FOR_BODY $LINEFEED_TEXT_LEGIBLE
 	done
 }
 
@@ -536,7 +548,7 @@ f_qpencode_file_linewise() {
 #
 # @param {int} new number of byte fields per line
 #
-f_adjust_linelen() {
+f_adjust_line_length() {
 	# According to manpages, this should work on:
 	#    HP-UX 11.11
 	#    AIX 7.2
@@ -663,7 +675,7 @@ f_md5sum() {
 				printhexbyte(substr($0, i, 2));
 			}
 		}
-	' | f_bytedump | f_adjust_linelen 33 | f_base64encode_bytes 1
+	' | f_bytedump | f_adjust_line_length 33 | f_base64encode_bytes $ENCODE_FOR_HEADER
 }
 
 f_composemail() {
