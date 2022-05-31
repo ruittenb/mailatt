@@ -60,7 +60,7 @@ f_initialize() {
 	charset=us-ascii
 	mixed_or_alternative=mixed
 	inline_or_attachment=attachment
-        RANDOM=`date +%s`
+        #RANDOM=`date +%s` # not sure how portable this is
 }
 
 f_setpath() {
@@ -371,7 +371,7 @@ f_base64encode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v in_header="$1" '
+	$awk -v for_header="$1" '
 		function store(n) {
 			buffer[bufindex++] = n
 			if (bufindex > 3) {
@@ -384,7 +384,7 @@ f_base64encode_bytes() {
 				if (bufindex == 2) buffer[2] = 0
 				spout(buffer[1], buffer[2], 0)
 			}
-			if (!in_header) printf("\n")
+			if (!for_header) printf("\n")
 		}
 		function spout(byte1, byte2, byte3) {
 			# Create base64 values
@@ -489,16 +489,16 @@ f_qpencode_bytes() {
 	#    SuSE UnitedLinux 1.0
 	#    Debian 3.0
 	#    Darwin 17.7.0
-	$awk -v in_header="$1" -v linefeed="$2" '
+	$awk -v for_header="$1" -v linefeed="$2" '
 		{
-			if (NR > 1) printf("%s", (in_header ? "\n  " : "=\n"))
+			if (NR > 1) printf("%s", (for_header ? "\n  " : "=\n"))
 			for (i = 1; i <= NF; i++) {
 				# normal ascii, but not space or equals sign (61)
 				if (($i > 32) && ($i != 61) && ($i < 127))                 printf("%c", $i)
 				# space, if not in header and not the first or last char on line
-				else if (($i == 32) && (!in_header) && (i > 2) && (i < NF)) printf(" ")
+				else if (($i == 32) && (!for_header) && (i > 2) && (i < NF)) printf(" ")
 				# if newline, then insert a repesentational line break
-				else if (($i == 10) && (!in_header)) {
+				else if (($i == 10) && (!for_header)) {
 					if (linefeed == 2)                                 printf("=0A")
 					else if (linefeed == 1)                            printf("=0A=\n")
 					# if linefeed == 0 the END block will print a NL
@@ -508,7 +508,7 @@ f_qpencode_bytes() {
 			}
 		}
 		END {
-			if (!in_header) printf("\n")
+			if (!for_header) printf("\n")
 		}
 	'
 }
@@ -521,7 +521,7 @@ f_base64encode_file() {
 f_uuencode_file() {
 	f_echo "begin $(f_mode ${1:-/}) $(basename ${1:-stdin})"
 	# number of fields MUST be a multiple of 3
-	f_bytedump ${1:+"$1"} | f_adjust_line_length 45 | f_uuencode_bytes # 0 0
+	f_bytedump ${1:+"$1"} | f_adjust_line_length 45 | f_uuencode_bytes
 	f_echo '`'"\nend"
 }
 
@@ -660,7 +660,7 @@ f_md5sum() {
 	# Filter that out and keep just the md5sum itself.
 	$md5sum "$1" | tr ' \t' '\n' | grep -E '[a-zA-Z0-9]{32}' | $awk '
 		BEGIN {
-			for ( n = 0; n < 16; n++ ) {
+			for (n = 0; n < 16; n++) {
 				hexnibble[sprintf("%x", n)] = n
 				hexnibble[sprintf("%X", n)] = n
 			}
@@ -712,7 +712,7 @@ f_msgattach() {
 	# RFC 2045 states: it is EXPRESSLY FORBIDDEN to use any encodings
 	# other than "7bit", "8bit", or "binary" with any composite media type,
 	# i.e. one that recursively includes other Content-Type fields.
-	# Currently the only composite media types are "multipart" and "message". 
+	# Currently the only composite media types are "multipart" and "message".
 	#
 	# RFC 1864 states: the Content-MD5 field may be used with any
 	# content type other than multipart or message/rfc822.
