@@ -3,9 +3,9 @@
 ############################################################################
 #
 # Name:		mailatt
-# Version:	1.27.4
+# Version:	1.27.5
 # Created:	2011-02-11
-# Date:		2022-05-31
+# Date:		2023-07-11
 # Author:	Rene Uittenbogaard
 # Requires:	sendmail
 # Usage:	mailatt [ -FIai ] [ -DVd ] [ -r <recipient> ] [ -c <cc-addr> ]
@@ -26,8 +26,8 @@ version='
 =pod
 
 =for roff
-.ds Yr 2011-2022
-.ds Vw @(#) mailatt 1.27.4
+.ds Yr 2011-2023
+.ds Vw @(#) mailatt 1.27.5
 .de Vp
 This manual pertains to \fBmailatt\fP version \\$3.
 ..
@@ -1067,7 +1067,8 @@ f_mime_identify() {
 		silo)		echo b model/mesh				;;
 		sit)		echo b application/x-stuffit			;;
 		sl)		echo b application/octet-stream			;;
-		smi)		echo b application/smil				;;
+		smi)		echo a chemical/x-daylight-smiles		;;
+		#smi)		echo b application/smil				;; # duplicate
 		smil)		echo b application/smil				;;
 		smv)		echo b video/x-smv				;;
 		snd)		echo b audio/basic				;;
@@ -1396,13 +1397,12 @@ multiple times. Do not end the line with a newline character.
 
 =item -I
 
-This option is nearly identical to B<-i>, but uses the "old" behavior,
-which is to include a filename for all MIME parts, even those that are
-attached using C<Content-Disposition: inline>.
+B<Deprecated>. This option is nearly identical to B<-i>, but uses the
+"old" behavior, which is to include a filename for all MIME parts,
+even those that are attached using C<Content-Disposition: inline>.
 
-B<Warning>: not all e-mail clients support this.  This option is
-provided only for backward-compatibility.  The use of this option
-is therefore discouraged; use B<-i> instead.
+Not all e-mail clients support this.  This option is
+provided only for backward-compatibility. Use B<-i> instead.
 
 =item -M I<mime-type>
 
@@ -1591,24 +1591,24 @@ Send a formatted mail in HTML format, specifying a From: address:
 
 Send a message in both plain text and HTML format:
 
-  mailatt -a -r constantijn,friso -s 'Greetings!' msg.txt msg.html
+  mailatt -a -r constantijn -s 'Greetings!' msg.txt msg.html
 
 Attach a file of unknown MIME type using quoted-printable encoding (I<e.g.>
 to increase readability).  This overrules the default encoding (base64)
 that is used for attachments of unknown MIME type coming I<before> the
 B<-q> option.
 
-  mailatt -r christina -s "config files" -i body.txt
+  mailatt -r irene -s "config files" -i body.txt
           /etc/sendmail.cf -q /etc/hosts
 
 Send a mail using the Cyrillic character set to multiple addresses:
 
-  mailatt -r 'Mr. Putin <putin@kremlin.ru>,root'
+  mailatt -r 'Mr. Zelensky <zelensky@kyiv.ua>,root'
           -s 'Important letter' -i -C ISO-8859-5 letter.txt
 
 Add custom lines to the mail header:
 
-  mailatt -r 'Benedictus_XVI@vatican.va' -s 'Oldest translation'
+  mailatt -r 'Franciscus@vatican.va' -s 'States translation'
           -i -H "X-Year-Finished: 1637" message.txt SV.pdf
 
 Add a Sender: line to the mail header:
@@ -1635,13 +1635,13 @@ Send a mail with mixed character sets:
 
 Send a mail with specified MIME types:
 
-  mailatt -r amalia -i greeting.txt
+  mailatt -r alexia,ariane -i greeting.txt
           -M application/x-rpm mailcap-2.1.31.noarch.rpm
           -M audio/x-pn-realaudio recording.rpm
 
 Specify the MIME type of an attachment fed via stdin:
 
-  mailatt -r alexia -s 'Holiday pictures' -i -C ISO-Latin-15
+  mailatt -r amalia -s 'Holiday pictures' -i -C ISO-Latin-15
           -M text/html - skiing-1.jpg skiing-2.jpg < greeting.html
 
 =head1 ENVIRONMENT
