@@ -1735,6 +1735,11 @@ RFC 2822 (obsolete): Internet Message Format
 RFC 3676: The Text/Plain Format and DelSp Parameters
 RFC 4021: Registration of Mail and MIME Header Fields
 
+URLs:
+https://www.rfc-editor.org/rfc/rfc822
+https://www.rfc-editor.org/rfc/rfc2183
+etc.
+
 Character sets:
 https://www.iana.org/assignments/character-sets/character-sets.xhtml
 http://nixnik.50webs.com/lynx/lynx_cfg.d/character_sets.html
